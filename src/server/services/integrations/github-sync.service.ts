@@ -5,24 +5,76 @@ import { githubService } from './github.service.js';
 import { settingsService } from '../settings.service.js';
 import { Result } from '../../utils/result.js';
 import { logger } from '../../utils/logger.js';
-import type { Integration, GitHubIntegrationConfig, ReportStatus, ReportType } from '@shared/types';
+import type {
+  Integration,
+  GitHubIntegrationConfig,
+  GitHubRepoRoute,
+  ReportStatus,
+  ReportType,
+} from '@shared/types';
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Match a report URL host against a route glob ('*' = any run of chars). Anchored, case-insensitive. */
+export function hostMatches(pattern: string, host: string): boolean {
+  const re = new RegExp('^' + pattern.split('*').map(escapeRegExp).join('.*') + '$', 'i');
+  return re.test(host);
+}
+
+/** Extract the lowercase host from a report URL; '' if missing/unparseable. */
+function extractHost(url: string | undefined): string {
+  if (!url) return '';
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
 
 /**
- * Resolve the GitHub destination (owner/repo) and labels for a report based on
- * its type. Per-type overrides (`typeRepos` / `typeLabels`) fall back to the
- * base `owner`/`repo`/`labels` when a type is unmapped, so existing
- * single-target integrations are unaffected.
+ * Specificity of a route for ordering. Exact host beats any wildcard; a longer
+ * wildcard literal beats a broader one; a host-agnostic rule scores 0 on host.
+ * A matching reportType adds a small refinement within the same host tier.
+ */
+function routeScore(route: GitHubRepoRoute): number {
+  let score = 0;
+  if (route.host) {
+    score += route.host.includes('*') ? route.host.replace(/\*/g, '').length : 1000;
+  }
+  if (route.reportType) score += 0.5;
+  return score;
+}
+
+/**
+ * Resolve the GitHub destination (owner/repo) and labels for a report.
+ * Repo: the most-specific matching `repoRoutes` rule (by host glob + type),
+ * falling back to the base owner/repo. Labels: per-type override (typeLabels)
+ * else the base labels — orthogonal to repo routing. Existing single-target
+ * integrations (no repoRoutes) are unaffected.
  */
 export function resolveGitHubTarget(
   config: GitHubIntegrationConfig,
-  reportType: ReportType
+  reportType: ReportType,
+  reportUrl?: string
 ): { owner: string; repo: string; labels: string[] | undefined } {
-  const repoOverride = config.typeRepos?.[reportType];
-  const labelOverride = config.typeLabels?.[reportType];
+  const host = extractHost(reportUrl);
+  let best: GitHubRepoRoute | undefined;
+  let bestScore = -1;
+  for (const route of config.repoRoutes ?? []) {
+    if (route.reportType && route.reportType !== reportType) continue;
+    if (route.host && !hostMatches(route.host, host)) continue;
+    const score = routeScore(route);
+    if (score > bestScore) {
+      bestScore = score;
+      best = route;
+    }
+  }
   return {
-    owner: repoOverride?.owner ?? config.owner,
-    repo: repoOverride?.repo ?? config.repo,
-    labels: labelOverride ?? config.labels,
+    owner: best?.owner ?? config.owner,
+    repo: best?.repo ?? config.repo,
+    labels: config.typeLabels?.[reportType] ?? config.labels,
   };
 }
 
@@ -89,9 +141,9 @@ export const githubSyncService = {
 
     const githubConfig = integration.config as GitHubIntegrationConfig;
 
-    // Resolve owner/repo/labels for this report's type (per-type overrides
-    // fall back to the base config).
-    const target = resolveGitHubTarget(githubConfig, report.reportType);
+    // Resolve owner/repo/labels for this report (repoRoutes by host+type, with
+    // labels from typeLabels) — falls back to the base config.
+    const target = resolveGitHubTarget(githubConfig, report.reportType, report.metadata?.url);
 
     // Load report files
     const files = await filesRepo.findByReportId(reportId);

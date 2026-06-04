@@ -555,18 +555,29 @@ export interface Integration {
   updatedAt: string;
 }
 
+// A single repo-routing rule. A report is matched when (host is unset OR the
+// report URL's host matches the `host` glob) AND (reportType is unset OR equals
+// the report's type). The most-specific matching rule wins (see resolveGitHubTarget).
+export interface GitHubRepoRoute {
+  host?: string; // glob: '*' matches any run of chars; case-insensitive; anchored. Omit = any host.
+  reportType?: ReportType; // omit = any type
+  owner: string;
+  repo: string;
+}
+
 export interface GitHubIntegrationConfig {
   owner: string;
   repo: string;
   accessToken: string; // Masked in API responses
   labels?: string[];
   assignees?: string[];
-  // Per-report-type routing. When a report's type has an entry in `typeLabels`,
-  // those labels are used instead of the base `labels`. When it has an entry in
-  // `typeRepos`, the issue is created in that repo instead of `owner`/`repo`.
-  // Both fall back to the base config when a type is unmapped.
+  // Per-report-type labels: when a type has an entry here, those labels are used
+  // instead of the base `labels` (orthogonal to repo routing).
   typeLabels?: Partial<Record<ReportType, string[]>>;
-  typeRepos?: Partial<Record<ReportType, { owner: string; repo: string }>>;
+  // Repo-routing rules evaluated most-specific-first: exact host > wildcard host
+  // (longer literal wins) > host-agnostic; a matching reportType refines within a
+  // host tier. No match falls back to the base owner/repo.
+  repoRoutes?: GitHubRepoRoute[];
   syncMode?: GitHubSyncMode; // 'manual' (default) or 'automatic'
   webhookId?: string; // GitHub webhook ID for bi-directional sync
   webhookSecret?: string; // Secret for verifying GitHub webhook payloads

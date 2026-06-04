@@ -1,66 +1,109 @@
 import { describe, it, expect } from 'bun:test';
-import { resolveGitHubTarget } from '../../src/server/services/integrations/github-sync.service';
+import {
+  resolveGitHubTarget,
+  hostMatches,
+} from '../../src/server/services/integrations/github-sync.service';
 import type { GitHubIntegrationConfig } from '../../src/shared/types';
 
 const base: GitHubIntegrationConfig = {
   owner: 'acme',
-  repo: 'bugs',
+  repo: 'homelab-containers',
   accessToken: 'x',
   labels: ['triage'],
 };
 
+const url = (host: string) => `https://${host}/some/page`;
+
+describe('hostMatches', () => {
+  it('matches exact hosts case-insensitively', () => {
+    expect(hostMatches('jellyfin.epikos.com', 'jellyfin.epikos.com')).toBe(true);
+    expect(hostMatches('jellyfin.epikos.com', 'JELLYFIN.epikos.com')).toBe(true);
+    expect(hostMatches('jellyfin.epikos.com', 'sonarr.epikos.com')).toBe(false);
+  });
+
+  it('matches wildcards anchored', () => {
+    expect(hostMatches('*.epikos.com', 'jellyfin.epikos.com')).toBe(true);
+    expect(hostMatches('*-arrs.epikos.com', 'media-arrs.epikos.com')).toBe(true);
+    expect(hostMatches('*.epikos.com', 'jellyfin.epikos.com.evil.com')).toBe(false);
+    expect(hostMatches('*', 'anything.example')).toBe(true);
+  });
+});
+
 describe('resolveGitHubTarget', () => {
-  it('falls back to base owner/repo/labels for an unmapped type', () => {
-    expect(resolveGitHubTarget(base, 'bug')).toEqual({
+  it('falls back to base owner/repo/labels with no routes', () => {
+    expect(resolveGitHubTarget(base, 'bug', url('jellyfin.epikos.com'))).toEqual({
       owner: 'acme',
-      repo: 'bugs',
+      repo: 'homelab-containers',
       labels: ['triage'],
     });
   });
 
-  it('applies per-type label overrides while keeping the base repo', () => {
-    const config: GitHubIntegrationConfig = {
+  it('routes by type only (feature -> features repo), others to default', () => {
+    const cfg: GitHubIntegrationConfig = {
       ...base,
-      typeLabels: { feature: ['enhancement'], question: ['question'] },
+      repoRoutes: [{ reportType: 'feature', owner: 'acme', repo: 'homelab-features' }],
     };
-    expect(resolveGitHubTarget(config, 'feature')).toEqual({
-      owner: 'acme',
-      repo: 'bugs',
-      labels: ['enhancement'],
-    });
-    // Unmapped type still falls back to base labels.
-    expect(resolveGitHubTarget(config, 'task').labels).toEqual(['triage']);
+    expect(resolveGitHubTarget(cfg, 'feature', url('jellyfin.epikos.com')).repo).toBe(
+      'homelab-features'
+    );
+    expect(resolveGitHubTarget(cfg, 'bug', url('jellyfin.epikos.com')).repo).toBe(
+      'homelab-containers'
+    );
   });
 
-  it('routes a mapped type to its own repo', () => {
-    const config: GitHubIntegrationConfig = {
+  it('routes by app/host (exact + wildcard)', () => {
+    const cfg: GitHubIntegrationConfig = {
       ...base,
-      typeRepos: { feature: { owner: 'acme', repo: 'roadmap' } },
+      repoRoutes: [
+        { host: 'foundry-relay.epikos.com', owner: 'acme', repo: 'foundry' },
+        { host: '*.epikos.com', owner: 'acme', repo: 'epikos-misc' },
+      ],
     };
-    expect(resolveGitHubTarget(config, 'feature')).toEqual({
-      owner: 'acme',
-      repo: 'roadmap',
-      labels: ['triage'],
-    });
-    // Unmapped type stays in the base repo.
-    expect(resolveGitHubTarget(config, 'bug').repo).toBe('bugs');
+    // exact host wins over the wildcard
+    expect(resolveGitHubTarget(cfg, 'bug', url('foundry-relay.epikos.com')).repo).toBe('foundry');
+    // other epikos hosts hit the wildcard
+    expect(resolveGitHubTarget(cfg, 'bug', url('jellyfin.epikos.com')).repo).toBe('epikos-misc');
+    // non-matching host -> default
+    expect(resolveGitHubTarget(cfg, 'bug', url('elsewhere.test')).repo).toBe('homelab-containers');
   });
 
-  it('combines per-type repo and label overrides', () => {
-    const config: GitHubIntegrationConfig = {
+  it('host+type beats host-only and type-only', () => {
+    const cfg: GitHubIntegrationConfig = {
       ...base,
-      typeRepos: { feature: { owner: 'acme', repo: 'roadmap' } },
-      typeLabels: { feature: ['enhancement', 'needs-triage'] },
+      repoRoutes: [
+        { reportType: 'feature', owner: 'acme', repo: 'features' },
+        { host: 'foundry.epikos.com', owner: 'acme', repo: 'foundry' },
+        { host: 'foundry.epikos.com', reportType: 'bug', owner: 'acme', repo: 'foundry-bugs' },
+      ],
     };
-    expect(resolveGitHubTarget(config, 'feature')).toEqual({
-      owner: 'acme',
-      repo: 'roadmap',
-      labels: ['enhancement', 'needs-triage'],
-    });
+    // foundry bug -> host+type rule
+    expect(resolveGitHubTarget(cfg, 'bug', url('foundry.epikos.com')).repo).toBe('foundry-bugs');
+    // foundry feature -> exact host beats type-only
+    expect(resolveGitHubTarget(cfg, 'feature', url('foundry.epikos.com')).repo).toBe('foundry');
+    // other app's feature -> type-only rule
+    expect(resolveGitHubTarget(cfg, 'feature', url('jellyfin.epikos.com')).repo).toBe('features');
   });
 
-  it('leaves labels undefined when the base has none and the type is unmapped', () => {
-    const config: GitHubIntegrationConfig = { owner: 'acme', repo: 'bugs', accessToken: 'x' };
-    expect(resolveGitHubTarget(config, 'bug').labels).toBeUndefined();
+  it('a longer wildcard literal beats a broader one', () => {
+    const cfg: GitHubIntegrationConfig = {
+      ...base,
+      repoRoutes: [
+        { host: '*.epikos.com', owner: 'acme', repo: 'broad' },
+        { host: '*-arrs.epikos.com', owner: 'acme', repo: 'arrs' },
+      ],
+    };
+    expect(resolveGitHubTarget(cfg, 'bug', url('media-arrs.epikos.com')).repo).toBe('arrs');
+    expect(resolveGitHubTarget(cfg, 'bug', url('jellyfin.epikos.com')).repo).toBe('broad');
+  });
+
+  it('labels come from typeLabels regardless of which repo a report routes to', () => {
+    const cfg: GitHubIntegrationConfig = {
+      ...base,
+      typeLabels: { feature: ['enhancement'] },
+      repoRoutes: [{ host: 'jellyfin.epikos.com', owner: 'acme', repo: 'jellyfin' }],
+    };
+    const r = resolveGitHubTarget(cfg, 'feature', url('jellyfin.epikos.com'));
+    expect(r.repo).toBe('jellyfin');
+    expect(r.labels).toEqual(['enhancement']);
   });
 });

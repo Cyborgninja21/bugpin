@@ -17,6 +17,7 @@ import { getLocale, t } from '../i18n/index.js';
 type WidgetStep = 'closed' | 'form' | 'annotating';
 
 const INITIAL_FORM_DATA: FormData = {
+  reportType: 'bug',
   title: '',
   description: '',
   priority: 'medium',
@@ -54,7 +55,10 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   // Lifted state for Modal persistence across screenshot capture
   const [activeTab, setActiveTab] = useState('details');
-  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] = useState<FormData>({
+    ...INITIAL_FORM_DATA,
+    reportType: config.reportTypes?.default ?? 'bug',
+  });
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showScreenCaptureConsent, setShowScreenCaptureConsent] = useState(false);
@@ -354,6 +358,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         await submitReportFn({
           apiKey: config.apiKey,
           serverUrl: config.serverUrl,
+          reportType: formData.reportType,
           title: formData.title,
           description: formData.description,
           priority: formData.priority,
@@ -443,6 +448,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           isSubmitting={isSubmitting}
           isCapturing={isCapturing}
           enableAnnotation={config.enableAnnotation}
+          enabledReportTypes={config.reportTypes?.enabled ?? ['bug']}
           maxImageSize={config.maxImageUploadSize}
           maxVideoSize={config.maxVideoUploadSize}
           activeTab={activeTab}

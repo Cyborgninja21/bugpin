@@ -510,6 +510,15 @@ widget.get('/config/:apiKey', async (c) => {
         mode: projLanguage.mode,
         defaultLanguage: projLanguage.defaultLanguage,
       },
+      reportTypes: {
+        enabled: project.settings?.reportTypes?.enabled?.length
+          ? project.settings.reportTypes.enabled
+          : (['bug'] as ReportType[]),
+        default:
+          project.settings?.reportTypes?.default ??
+          project.settings?.reportTypes?.enabled?.[0] ??
+          ('bug' as ReportType),
+      },
     },
   });
 });

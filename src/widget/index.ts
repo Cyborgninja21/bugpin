@@ -89,6 +89,7 @@ async function fetchConfig(
             ? cfg.maxVideoUploadSizeMb * 1024 * 1024
             : undefined,
           language: cfg.language,
+          reportTypes: cfg.reportTypes,
         };
       }
     } else if (response.status === 403) {

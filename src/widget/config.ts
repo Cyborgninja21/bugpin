@@ -1,6 +1,11 @@
-import type { LauncherTextBundle, LocaleCode } from '@shared/types';
+import type { LauncherTextBundle, LocaleCode, ReportType } from '@shared/types';
 
 export type { LauncherTextBundle };
+
+export interface WidgetReportTypesConfig {
+  enabled: ReportType[];
+  default: ReportType;
+}
 
 export interface WidgetLanguageConfig {
   mode: 'auto' | 'manual';
@@ -57,6 +62,7 @@ export interface WidgetConfig {
   maxScreenshotSize: number;
   maxImageUploadSize: number;
   maxVideoUploadSize: number;
+  reportTypes: WidgetReportTypesConfig;
 }
 
 export const defaultConfig: WidgetConfig = {
@@ -108,4 +114,5 @@ export const defaultConfig: WidgetConfig = {
   maxScreenshotSize: 10 * 1024 * 1024, // 10MB
   maxImageUploadSize: 10 * 1024 * 1024, // 10MB
   maxVideoUploadSize: 50 * 1024 * 1024, // 50MB
+  reportTypes: { enabled: ['bug'], default: 'bug' },
 };

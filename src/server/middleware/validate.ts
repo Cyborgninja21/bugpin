@@ -312,6 +312,7 @@ export const schemas = {
   reportFilter: z.object({
     projectId: z.string().optional(),
     source: z.enum(['widget', 'manual']).optional(),
+    reportType: z.string().optional(), // comma-separated list
     status: z.string().optional(), // comma-separated list
     priority: z.string().optional(), // comma-separated list
     assignedTo: z.string().optional(),

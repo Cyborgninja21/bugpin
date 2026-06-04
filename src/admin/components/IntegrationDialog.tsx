@@ -216,6 +216,8 @@ export function IntegrationDialog({
         setEnableLabels(false);
         setEnableAssignees(false);
         setFileTransferMode('link');
+        setTypeLabelsText(EMPTY_TYPE_LABELS);
+        setRoutes([]);
         setSyncMode('manual');
       }
       setRepositories([]);

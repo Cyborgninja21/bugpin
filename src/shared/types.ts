@@ -26,6 +26,8 @@ export interface LauncherTextBundle {
 export type ReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type ReportPriority = 'lowest' | 'low' | 'medium' | 'high' | 'highest';
 export type ReportSource = 'widget' | 'manual';
+export type ReportType = 'bug' | 'feature' | 'question' | 'task';
+export const REPORT_TYPES: ReportType[] = ['bug', 'feature', 'question', 'task'];
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
 export type UserRole = 'admin' | 'editor' | 'viewer';
 export type FileType = 'screenshot' | 'video' | 'attachment';
@@ -104,6 +106,7 @@ export interface Report {
   projectId: string;
   projectName?: string; // Only populated in list queries with JOIN
   source: ReportSource;
+  reportType: ReportType;
   title: string;
   description?: string;
   status: ReportStatus;
@@ -252,6 +255,12 @@ export interface ProjectSettings {
     emailRequired?: boolean;
     customFields?: CustomField[];
   };
+  // Report-type selector shown in the widget. When more than one type is
+  // enabled the widget renders a type picker; otherwise it submits `default`.
+  reportTypes?: {
+    enabled?: ReportType[]; // defaults to ['bug'] when unset
+    default?: ReportType; // preselected type; defaults to enabled[0] or 'bug'
+  };
   notifyReporter?: boolean;
   reporterNotifications?: Partial<ReporterNotificationSettings>;
   // Legacy widget settings (for backward compatibility during migration)
@@ -361,6 +370,7 @@ export interface Webhook {
 
 export interface CreateReportRequest {
   apiKey: string;
+  reportType?: ReportType;
   title: string;
   description?: string;
   priority?: ReportPriority;
@@ -374,6 +384,7 @@ export interface CreateReportRequest {
 export interface ReportFilter {
   projectId?: string;
   source?: ReportSource;
+  reportType?: ReportType[];
   status?: ReportStatus[];
   priority?: ReportPriority[];
   assignedTo?: string;
@@ -550,6 +561,12 @@ export interface GitHubIntegrationConfig {
   accessToken: string; // Masked in API responses
   labels?: string[];
   assignees?: string[];
+  // Per-report-type routing. When a report's type has an entry in `typeLabels`,
+  // those labels are used instead of the base `labels`. When it has an entry in
+  // `typeRepos`, the issue is created in that repo instead of `owner`/`repo`.
+  // Both fall back to the base config when a type is unmapped.
+  typeLabels?: Partial<Record<ReportType, string[]>>;
+  typeRepos?: Partial<Record<ReportType, { owner: string; repo: string }>>;
   syncMode?: GitHubSyncMode; // 'manual' (default) or 'automatic'
   webhookId?: string; // GitHub webhook ID for bi-directional sync
   webhookSecret?: string; // Secret for verifying GitHub webhook payloads

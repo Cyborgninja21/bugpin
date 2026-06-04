@@ -16,6 +16,7 @@ import type {
   ReportFilter,
   ReportStatus,
   ReportPriority,
+  ReportType,
   ReportMetadata,
   ReportSource,
   ManualReportChannel,
@@ -36,6 +37,7 @@ export interface MediaFile {
 
 export interface CreateReportInput {
   apiKey: string;
+  reportType?: ReportType;
   title: string;
   description?: string;
   priority?: ReportPriority;
@@ -49,6 +51,7 @@ export interface CreateReportInput {
 
 export interface CreateManualReportInput {
   projectId: string;
+  reportType?: ReportType;
   title: string;
   description?: string;
   priority?: ReportPriority;
@@ -223,6 +226,7 @@ async function createForProject(
     ? NonNullable<T>
     : never,
   input: {
+    reportType?: ReportType;
     title: string;
     description?: string;
     priority?: ReportPriority;
@@ -268,6 +272,7 @@ async function createForProject(
   const reportData: CreateReportData = {
     projectId: project.id,
     source: options.source,
+    reportType: input.reportType ?? 'bug',
     title: input.title.trim(),
     description: normalizeOptionalText(input.description),
     priority: input.priority ?? 'medium',
@@ -368,6 +373,7 @@ export const reportsService = {
     return createForProject(
       project,
       {
+        reportType: input.reportType,
         title: input.title,
         description: input.description,
         priority: input.priority,
@@ -409,6 +415,7 @@ export const reportsService = {
     return createForProject(
       project,
       {
+        reportType: input.reportType,
         title: input.title,
         description: input.description,
         priority: input.priority,

@@ -5,7 +5,26 @@ import { githubService } from './github.service.js';
 import { settingsService } from '../settings.service.js';
 import { Result } from '../../utils/result.js';
 import { logger } from '../../utils/logger.js';
-import type { Integration, GitHubIntegrationConfig, ReportStatus } from '@shared/types';
+import type { Integration, GitHubIntegrationConfig, ReportStatus, ReportType } from '@shared/types';
+
+/**
+ * Resolve the GitHub destination (owner/repo) and labels for a report based on
+ * its type. Per-type overrides (`typeRepos` / `typeLabels`) fall back to the
+ * base `owner`/`repo`/`labels` when a type is unmapped, so existing
+ * single-target integrations are unaffected.
+ */
+export function resolveGitHubTarget(
+  config: GitHubIntegrationConfig,
+  reportType: ReportType
+): { owner: string; repo: string; labels: string[] | undefined } {
+  const repoOverride = config.typeRepos?.[reportType];
+  const labelOverride = config.typeLabels?.[reportType];
+  return {
+    owner: repoOverride?.owner ?? config.owner,
+    repo: repoOverride?.repo ?? config.repo,
+    labels: labelOverride ?? config.labels,
+  };
+}
 
 // Types
 
@@ -70,6 +89,10 @@ export const githubSyncService = {
 
     const githubConfig = integration.config as GitHubIntegrationConfig;
 
+    // Resolve owner/repo/labels for this report's type (per-type overrides
+    // fall back to the base config).
+    const target = resolveGitHubTarget(githubConfig, report.reportType);
+
     // Load report files
     const files = await filesRepo.findByReportId(reportId);
 
@@ -82,8 +105,8 @@ export const githubSyncService = {
           report.githubIssueNumber,
           { ...report, files },
           {
-            owner: githubConfig.owner,
-            repo: githubConfig.repo,
+            owner: target.owner,
+            repo: target.repo,
             accessToken: githubConfig.accessToken,
             fileTransferMode: githubConfig.fileTransferMode,
           }
@@ -110,10 +133,10 @@ export const githubSyncService = {
         const createResult = await githubService.createIssue(
           { ...report, files },
           {
-            owner: githubConfig.owner,
-            repo: githubConfig.repo,
+            owner: target.owner,
+            repo: target.repo,
             accessToken: githubConfig.accessToken,
-            labels: githubConfig.labels,
+            labels: target.labels,
             assignees: githubConfig.assignees,
             fileTransferMode: githubConfig.fileTransferMode,
           }

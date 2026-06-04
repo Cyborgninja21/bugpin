@@ -7,7 +7,25 @@ import {
   IntegrationType,
   GitHubIntegrationConfig,
   GitHubSyncMode,
+  ReportType,
+  REPORT_TYPES,
 } from '@shared/types';
+
+const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  bug: 'Bug',
+  feature: 'Feature request',
+  question: 'Question',
+  task: 'Task',
+};
+
+type PerTypeRouting = Record<ReportType, { labels: string; owner: string; repo: string }>;
+
+const EMPTY_PER_TYPE: PerTypeRouting = {
+  bug: { labels: '', owner: '', repo: '' },
+  feature: { labels: '', owner: '', repo: '' },
+  question: { labels: '', owner: '', repo: '' },
+  task: { labels: '', owner: '', repo: '' },
+};
 import {
   useCreateIntegration,
   useUpdateIntegration,
@@ -117,6 +135,7 @@ export function IntegrationDialog({
   const [assigneesError, setAssigneesError] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [fileTransferMode, setFileTransferMode] = useState<'link' | 'upload'>('link');
+  const [perType, setPerType] = useState<PerTypeRouting>(EMPTY_PER_TYPE);
   const [syncMode, setSyncMode] = useState<GitHubSyncMode>('manual');
   const [showSyncDialog, setShowSyncDialog] = useState(false);
   const [pendingUnsyncedCount, setPendingUnsyncedCount] = useState(0);
@@ -141,6 +160,15 @@ export function IntegrationDialog({
         setEnableLabels(hasLabels);
         setEnableAssignees(hasAssignees);
         setFileTransferMode(config.fileTransferMode || 'link');
+        const pt: PerTypeRouting = { ...EMPTY_PER_TYPE };
+        for (const rt of REPORT_TYPES) {
+          pt[rt] = {
+            labels: (config.typeLabels?.[rt] || []).join(', '),
+            owner: config.typeRepos?.[rt]?.owner || '',
+            repo: config.typeRepos?.[rt]?.repo || '',
+          };
+        }
+        setPerType(pt);
         setSyncMode(config.syncMode || 'manual');
 
         // Auto-fetch labels and assignees for editing when toggles are enabled
@@ -340,6 +368,21 @@ export function IntegrationDialog({
   };
 
   const onSubmit = async (data: FormData) => {
+    // Per-type routing overrides: labels (comma-separated) and/or a repo per type.
+    const typeLabels: Partial<Record<ReportType, string[]>> = {};
+    const typeRepos: Partial<Record<ReportType, { owner: string; repo: string }>> = {};
+    for (const rt of REPORT_TYPES) {
+      const e = perType[rt];
+      const labels = e.labels
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (labels.length > 0) typeLabels[rt] = labels;
+      if (e.owner.trim() && e.repo.trim()) {
+        typeRepos[rt] = { owner: e.owner.trim(), repo: e.repo.trim() };
+      }
+    }
+
     const config: GitHubIntegrationConfig = {
       owner: data.owner.trim(),
       repo: data.repo.trim(),
@@ -348,6 +391,8 @@ export function IntegrationDialog({
       labels: selectedLabels.length > 0 ? selectedLabels : undefined,
       assignees: selectedAssignees.length > 0 ? selectedAssignees : undefined,
       fileTransferMode,
+      typeLabels: Object.keys(typeLabels).length > 0 ? typeLabels : undefined,
+      typeRepos: Object.keys(typeRepos).length > 0 ? typeRepos : undefined,
     };
 
     try {
@@ -717,6 +762,45 @@ export function IntegrationDialog({
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Per-type routing (optional) */}
+              <div className="space-y-3 border rounded-lg p-3">
+                <div className="space-y-1">
+                  <Label>Per-type routing (optional)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Override labels and/or the destination repo for specific report types. Leave
+                    blank to use the base repo/labels above. Labels are comma-separated.
+                  </p>
+                </div>
+                {REPORT_TYPES.map((rt) => (
+                  <div key={rt} className="space-y-1.5">
+                    <Label className="text-xs font-medium">{REPORT_TYPE_LABELS[rt]}</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input
+                        placeholder="labels (e.g. enhancement)"
+                        value={perType[rt].labels}
+                        onChange={(e) =>
+                          setPerType((p) => ({ ...p, [rt]: { ...p[rt], labels: e.target.value } }))
+                        }
+                      />
+                      <Input
+                        placeholder="repo owner (optional)"
+                        value={perType[rt].owner}
+                        onChange={(e) =>
+                          setPerType((p) => ({ ...p, [rt]: { ...p[rt], owner: e.target.value } }))
+                        }
+                      />
+                      <Input
+                        placeholder="repo name (optional)"
+                        value={perType[rt].repo}
+                        onChange={(e) =>
+                          setPerType((p) => ({ ...p, [rt]: { ...p[rt], repo: e.target.value } }))
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {/* File Transfer Mode Toggle */}

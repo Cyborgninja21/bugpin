@@ -188,6 +188,46 @@ describe('integrationsService.update/delete', () => {
     expect(result.success).toBe(true);
   });
 
+  it('preserves the real access token when the masked token is re-submitted', async () => {
+    let captured: { accessToken?: string } | undefined;
+    integrationsRepo.update = async (_id, updates) => {
+      captured = updates.config as { accessToken?: string };
+      return updatedIntegration;
+    };
+    // 'token1234' masks to 'toke****1234'
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: 'toke****1234' } as never,
+    });
+    expect(result.success).toBe(true);
+    expect(captured?.accessToken).toBe('token1234');
+  });
+
+  it('preserves the real access token when a blank token is submitted', async () => {
+    let captured: { accessToken?: string } | undefined;
+    integrationsRepo.update = async (_id, updates) => {
+      captured = updates.config as { accessToken?: string };
+      return updatedIntegration;
+    };
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: '' } as never,
+    });
+    expect(result.success).toBe(true);
+    expect(captured?.accessToken).toBe('token1234');
+  });
+
+  it('writes a genuinely new access token through', async () => {
+    let captured: { accessToken?: string } | undefined;
+    integrationsRepo.update = async (_id, updates) => {
+      captured = updates.config as { accessToken?: string };
+      return updatedIntegration;
+    };
+    const result = await integrationsService.update('int_1', {
+      config: { owner: 'org', repo: 'repo', accessToken: 'brandnewtoken9999' } as never,
+    });
+    expect(result.success).toBe(true);
+    expect(captured?.accessToken).toBe('brandnewtoken9999');
+  });
+
   it('deletes integration', async () => {
     const result = await integrationsService.delete('int_1');
     expect(result.success).toBe(true);

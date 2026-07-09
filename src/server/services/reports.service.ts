@@ -23,7 +23,6 @@ import type {
   PaginatedResponse,
   FileType,
   FileRecord,
-  ForwardedReference,
   LocaleCode,
 } from '@shared/types';
 
@@ -68,7 +67,6 @@ export interface UpdateReportInput {
   priority?: ReportPriority;
   assignedTo?: string | null;
   resolvedBy?: string;
-  forwardedTo?: ForwardedReference[];
 }
 
 async function validateAssignee(assignedTo: string | null | undefined): Promise<Result<void>> {
@@ -540,10 +538,6 @@ export const reportsService = {
       }
 
       updates.assignedTo = input.assignedTo ?? undefined;
-    }
-
-    if (input.forwardedTo !== undefined) {
-      updates.forwardedTo = input.forwardedTo;
     }
 
     const report = await reportsRepo.update(id, updates);

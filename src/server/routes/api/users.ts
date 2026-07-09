@@ -6,8 +6,8 @@ import { validate, schemas } from '../../middleware/validate.js';
 import { saveAvatar, deleteAllAvatars } from '../../storage/files.js';
 import { config } from '../../config.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
+import { resolvePathInside } from '../../utils/safe-path.js';
 import type { User } from '@shared/types';
-import * as path from 'path';
 
 const users = new Hono();
 
@@ -270,7 +270,10 @@ users.get('/me/avatar/:filename', authMiddleware, async (c) => {
   const currentUser = c.get('user') as User;
   const filename = c.req.param('filename');
 
-  const filePath = path.join(config.avatarsDir, currentUser.id, filename);
+  const filePath = resolvePathInside(config.avatarsDir, currentUser.id, filename);
+  if (!filePath) {
+    return c.json({ success: false, error: 'NOT_FOUND', message: 'Avatar not found' }, 404);
+  }
 
   try {
     const file = Bun.file(filePath);

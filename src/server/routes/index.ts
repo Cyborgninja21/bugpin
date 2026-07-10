@@ -15,6 +15,7 @@ import { apiTokensRoutes } from './api/api-tokens.js';
 import { customTemplatesRoutes } from './api/custom-templates.js';
 import { whiteLabelRoutes } from './api/white-label.js';
 import { reporterMessagesRoutes } from './api/reporter-messages.js';
+import { reportHistoryRoutes } from './api/report-history.js';
 import { widgetRoutes } from './widget/submit.js';
 import { githubWebhookRoutes } from './api/github-webhook.js';
 import { publicFilesRoutes } from './api/public-files.js';
@@ -29,6 +30,7 @@ export function createApiRouter(): Hono {
   api.route('/auth', authRoutes);
   api.route('/reports', reportsRoutes);
   api.route('/reports', reporterMessagesRoutes);
+  api.route('/reports', reportHistoryRoutes);
   api.route('/projects', projectsRoutes);
   api.route('/users', usersRoutes);
   api.route('/settings', settingsRoutes);

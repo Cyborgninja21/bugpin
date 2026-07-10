@@ -198,6 +198,23 @@ export async function initSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_reports_github_sync_status ON reports(github_sync_status) WHERE github_sync_status IS NOT NULL`
   );
 
+  // Report history table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS report_history (
+      id TEXT PRIMARY KEY,
+      report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL CHECK(action IN ('created', 'status_changed', 'priority_changed', 'assignee_changed')),
+      old_value TEXT,
+      new_value TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_report_history_report_id ON report_history(report_id)`);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_report_history_created_at ON report_history(report_id, created_at DESC)`
+  );
+
   // Files table
   db.exec(`
     CREATE TABLE IF NOT EXISTS files (
@@ -458,9 +475,10 @@ export async function runMigrations(): Promise<void> {
         logger.info('Migration applied successfully', { file });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const isBootstrapColumnConflict =
-          file === '003_add_reporter_locale.sql' && message.includes('duplicate column name');
-        if (isBootstrapColumnConflict) {
+        const isBootstrapSchemaConflict =
+          (file === '003_add_reporter_locale.sql' && message.includes('duplicate column name')) ||
+          (file === '004_add_report_history.sql' && message.includes('already exists'));
+        if (isBootstrapSchemaConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
           logger.info('Migration already applied by schema bootstrap, recorded as applied', {
             file,

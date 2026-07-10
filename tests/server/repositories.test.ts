@@ -15,7 +15,9 @@ import { sessionsRepo } from '../../src/server/database/repositories/sessions.re
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
+import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
+import { UNASSIGNED_FILTER } from '../../src/shared/types';
 import { webhooksRepo } from '../../src/server/database/repositories/webhooks.repo';
 import {
   notificationPreferencesRepo,
@@ -50,6 +52,7 @@ afterAll(() => {
 
 function resetDb() {
   const db = getDb();
+  db.exec('DELETE FROM report_history');
   db.exec('DELETE FROM files');
   db.exec('DELETE FROM reports');
   db.exec('DELETE FROM sessions');
@@ -405,6 +408,32 @@ describe('reportsRepo', () => {
     expect(result.data[0].title).toBe('Crash on login');
   });
 
+  it('filters unassigned reports', async () => {
+    const project = await createProject('Unassigned');
+    const user = await createUser('assignee@example.com');
+    await reportsRepo.create({
+      projectId: project.id,
+      title: 'Assigned issue',
+      priority: 'medium',
+      metadata: baseMetadata,
+      assignedTo: user.id,
+    });
+    const unassigned = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Unassigned issue',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    const result = await reportsRepo.find({
+      projectId: project.id,
+      assignedTo: UNASSIGNED_FILTER,
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.data[0].id).toBe(unassigned.id);
+  });
+
   it('handles github sync fields', async () => {
     const project = await createProject('GitHub');
     const report = await reportsRepo.create({
@@ -609,5 +638,39 @@ describe('notificationPreferencesRepo', () => {
 
     const removed = await projectNotificationDefaultsRepo.delete(project.id);
     expect(removed).toBe(false);
+  });
+});
+
+describe('reportHistoryRepo', () => {
+  it('records and lists report history entries', async () => {
+    const project = await createProject('History');
+    const user = await createUser('history@example.com');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Tracked issue',
+      priority: 'medium',
+      metadata: baseMetadata,
+    });
+
+    await reportHistoryRepo.create({
+      reportId: report.id,
+      userId: user.id,
+      action: 'created',
+    });
+    await reportHistoryRepo.create({
+      reportId: report.id,
+      userId: user.id,
+      action: 'status_changed',
+      oldValue: 'open',
+      newValue: 'in_progress',
+    });
+
+    const entries = await reportHistoryRepo.findByReportId(report.id);
+    expect(entries).toHaveLength(2);
+    expect(entries.some((entry) => entry.action === 'created')).toBe(true);
+    expect(
+      entries.some((entry) => entry.action === 'status_changed' && entry.newValue === 'in_progress')
+    ).toBe(true);
+    expect(entries.find((entry) => entry.action === 'created')?.userName).toBe('User');
   });
 });

@@ -48,6 +48,7 @@ import {
   RefreshCw,
   CheckCircle,
   MessageSquare,
+  History,
 } from 'lucide-react';
 import { Github } from '../../components/icons/Github';
 import {
@@ -66,6 +67,8 @@ import {
 } from '../../lib/reportExport';
 import { CopySectionButton } from '../../components/report/CopySectionButton';
 import { ExportDiagnosticsMenu } from '../../components/report/ExportDiagnosticsMenu';
+import { ReportHistoryTimeline } from '../../components/report/ReportHistoryTimeline';
+import { useReportHistory } from '../../hooks/useReportHistory';
 import type { AppSettings, Project, Report, ReportSource, User } from '@shared/types';
 
 const UNASSIGNED_VALUE = '__unassigned__';
@@ -92,6 +95,10 @@ export function ReportDetail() {
   );
   const [reporterMessagesOpen, setReporterMessagesOpen] = usePersistedOpenState(
     'bugpin.report-detail.reporter-messages-open',
+    true
+  );
+  const [activityOpen, setActivityOpen] = usePersistedOpenState(
+    'bugpin.report-detail.activity-open',
     true
   );
 
@@ -157,6 +164,8 @@ export function ReportDetail() {
     isSending,
   } = useReporterMessages(id ?? '');
 
+  const { data: reportHistory = [], isLoading: historyLoading } = useReportHistory(id);
+
   const forwardMutation = useForwardReport();
 
   const retrySyncMutation = useMutation({
@@ -184,6 +193,7 @@ export function ReportDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['report', id] });
+      queryClient.invalidateQueries({ queryKey: ['report-history', id] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
       queryClient.invalidateQueries({ queryKey: ['recent-reports'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
@@ -1157,6 +1167,31 @@ export function ReportDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Activity */}
+          <Collapsible open={activityOpen} onOpenChange={setActivityOpen}>
+            <Card>
+              <CardHeader className="p-0">
+                <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors p-6 text-left rounded-t-xl">
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Activity
+                    {reportHistory.length > 0 && (
+                      <Badge variant="secondary" className="ml-1">
+                        {reportHistory.length}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]_&]:rotate-180 ml-2" />
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="pt-4">
+                  <ReportHistoryTimeline entries={reportHistory} isLoading={historyLoading} />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           {/* Reporter Messages */}
           {report.reporterEmail && messagingEnabled && (

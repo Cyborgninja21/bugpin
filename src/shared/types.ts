@@ -26,6 +26,15 @@ export interface LauncherTextBundle {
 export type ReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type ReportPriority = 'lowest' | 'low' | 'medium' | 'high' | 'highest';
 export type ReportSource = 'widget' | 'manual';
+
+/** URL/query value for filtering reports with no assignee */
+export const UNASSIGNED_FILTER = '__unassigned__';
+
+export type ReportHistoryAction =
+  | 'created'
+  | 'status_changed'
+  | 'priority_changed'
+  | 'assignee_changed';
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
 export type UserRole = 'admin' | 'editor' | 'viewer';
 export type FileType = 'screenshot' | 'video' | 'attachment';
@@ -683,5 +692,18 @@ export interface ReporterMessage {
   userName?: string;
   message: string;
   sentAt: string;
+  createdAt: string;
+}
+
+export interface ReportHistoryEntry {
+  id: string;
+  reportId: string;
+  userId?: string;
+  userName?: string;
+  action: ReportHistoryAction;
+  oldValue?: string;
+  newValue?: string;
+  oldDisplay?: string;
+  newDisplay?: string;
   createdAt: string;
 }

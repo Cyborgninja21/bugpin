@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw';
+import { UNASSIGNED_FILTER } from '@shared/types';
 
 // Mock data
 export const mockUsers = {
@@ -269,7 +270,11 @@ export const handlers = [
     let filtered = [...mockReports];
     if (status) filtered = filtered.filter((r) => r.status === status);
     if (priority) filtered = filtered.filter((r) => r.priority === priority);
-    if (assignedTo) filtered = filtered.filter((r) => r.assignedTo === assignedTo);
+    if (assignedTo === UNASSIGNED_FILTER) {
+      filtered = filtered.filter((r) => !r.assignedTo);
+    } else if (assignedTo) {
+      filtered = filtered.filter((r) => r.assignedTo === assignedTo);
+    }
     if (source) filtered = filtered.filter((r) => r.source === source);
 
     // Apply limit
@@ -303,6 +308,13 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       messages: [],
+    });
+  }),
+
+  http.get('/api/reports/:id/history', () => {
+    return HttpResponse.json({
+      success: true,
+      history: [],
     });
   }),
 

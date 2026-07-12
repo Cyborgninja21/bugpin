@@ -190,6 +190,31 @@ describe('usersRepo', () => {
     const deleted = await usersRepo.delete(user.id);
     expect(deleted).toBe(true);
   });
+
+  it('accepts an invitation only once for a given token', async () => {
+    const token = 'invite-token-once';
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const invited = await usersRepo.createInvited({
+      email: 'invitee@example.com',
+      name: 'Invitee',
+      role: 'editor',
+      invitationToken: token,
+      invitationTokenExpiresAt: expiresAt,
+    });
+
+    const first = await usersRepo.acceptInvitation(invited.id, token, 'hash-one', 'Winner');
+    expect(first?.name).toBe('Winner');
+    expect(first?.isActive).toBe(true);
+
+    const second = await usersRepo.acceptInvitation(invited.id, token, 'hash-two', 'Loser');
+    expect(second).toBeNull();
+
+    const reloaded = await usersRepo.findById(invited.id);
+    expect(reloaded?.name).toBe('Winner');
+
+    const withPassword = await usersRepo.findByEmailWithPassword('invitee@example.com');
+    expect(withPassword?.passwordHash).toBe('hash-one');
+  });
 });
 
 describe('sessionsRepo', () => {

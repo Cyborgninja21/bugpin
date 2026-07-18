@@ -1030,9 +1030,9 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
   );
 
   return (
-    <div class="flex flex-col">
+    <div class="h-full min-h-0 flex flex-col">
       {/* Toolbar */}
-      <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
+      <div class="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 border-b border-solid border-border bg-muted">
         <div class="flex items-center gap-1">
           <ToolButton
             tool="select"
@@ -1162,14 +1162,14 @@ export const AnnotationCanvas: FunctionComponent<AnnotationCanvasProps> = ({
 
       {/* Canvas */}
       <div
-        class="min-h-[600px] min-w-[700px] max-h-[70vh] overflow-auto flex items-center justify-center p-4 bg-muted"
+        class="flex-auto min-h-0 min-w-[700px] overflow-auto flex items-center justify-center p-4 bg-muted"
         ref={canvasWrapperRef}
       >
         <canvas ref={canvasRef} />
       </div>
 
       {/* Actions */}
-      <div class="flex gap-3 p-4 border-t border-solid border-border bg-muted">
+      <div class="shrink-0 flex gap-3 p-4 border-t border-solid border-border bg-muted">
         <Button variant="outline" class="flex-1" onClick={onCancel}>
           {t('annotation.buttons.cancel')}
         </Button>

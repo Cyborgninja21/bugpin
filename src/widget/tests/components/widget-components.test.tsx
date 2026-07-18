@@ -232,6 +232,9 @@ describe('widget components', () => {
     );
     expect(html).toContain('Report a Bug');
     expect(html).toContain('Submit Report');
+    expect(html).toContain('h-[770px]');
+    expect(html).not.toContain('min-h-[770px]');
+    expect(html).toContain('max-h-[calc(100vh-40px)]');
   });
 
   it('renders widget dialog media tab with count', () => {

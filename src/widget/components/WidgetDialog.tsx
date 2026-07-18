@@ -132,13 +132,13 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   return (
     <div class="fixed inset-0 z-[2147483646] bg-black/50 flex items-center justify-center p-5 animate-[fadeIn_0.2s_ease-out]">
       <div
-        class="relative w-full max-w-3xl min-h-[770px] max-h-[calc(100vh-40px)] bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]"
+        class="relative w-full max-w-3xl h-[770px] max-h-[calc(100vh-40px)] min-h-0 bg-background border border-solid border-border rounded shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.2s_ease-out]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="bugpin-title"
       >
         {/* Header */}
-        <div class="flex items-center justify-between p-6 border-b border-solid border-border">
+        <div class="shrink-0 flex items-center justify-between p-6 border-b border-solid border-border">
           <h1 id="bugpin-title">{t('dialog.title')}</h1>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('aria.close')}>
             <X class="w-5 h-5" />
@@ -150,7 +150,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         ) : (
           <>
             {/* Tabs */}
-            <div class="p-4 pb-0 bg-transparent">
+            <div class="shrink-0 p-4 pb-0 bg-transparent">
               <Tabs tabs={tabs} activeTab={activeTab} onTabChange={onActiveTabChange} />
             </div>
 
@@ -275,7 +275,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
             </div>
 
             {/* Footer */}
-            <div class="flex gap-3 p-6 border-t border-solid border-border bg-muted">
+            <div class="shrink-0 flex gap-3 p-6 border-t border-solid border-border bg-muted">
               <Button variant="outline" class="flex-1" onClick={onClose} disabled={isSubmitting}>
                 {t('dialog.buttons.cancel')}
               </Button>
@@ -291,7 +291,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         )}
 
         {/* Branding */}
-        <div class="py-3 px-6 text-center text-xs text-muted-foreground border-t border-solid border-border bg-background">
+        <div class="shrink-0 py-3 px-6 text-center text-xs text-muted-foreground border-t border-solid border-border bg-background">
           {t('dialog.branding.poweredBy')}{' '}
           <a
             href="https://bugpin.io"

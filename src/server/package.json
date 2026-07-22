@@ -18,7 +18,7 @@
     "@aws-sdk/client-s3": "^3.1047.0",
     "hono": "^4.12.18",
     "nodemailer": "^9.0.1",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {

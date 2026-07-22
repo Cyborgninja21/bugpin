@@ -267,6 +267,13 @@ describe('App interactions', () => {
       'Fabric canvas not ready'
     );
 
+    const annotationRoot = container.querySelector('canvas')?.parentElement?.parentElement;
+    const annotationModal = annotationRoot?.parentElement;
+
+    expect(annotationModal?.classList.contains('h-[770px]')).toBe(true);
+    expect(annotationModal?.classList.contains('max-h-[calc(100vh-40px)]')).toBe(true);
+    expect(annotationModal?.classList.contains('min-h-0')).toBe(true);
+
     const doneButton = await waitFor(
       () =>
         Array.from(container.querySelectorAll('button')).find(

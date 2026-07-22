@@ -196,7 +196,13 @@ reports.patch(
   async (c) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    const body = await c.req.json();
+    const body = c.get('validatedBody' as never) as {
+      title?: string;
+      description?: string;
+      status?: 'open' | 'in_progress' | 'resolved' | 'closed';
+      priority?: 'lowest' | 'low' | 'medium' | 'high' | 'highest';
+      assignedTo?: string | null;
+    };
 
     const result = await reportsService.update(id, body, user.id);
 

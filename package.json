@@ -1,7 +1,7 @@
 {
   "name": "bugpin",
   "description": "Self-hosted visual bug reporting tool",
-  "version": "1.1.1",
+  "version": "1.2.0-dev",
   "license": "AGPL-3.0-only",
   "private": false,
   "type": "module",
@@ -29,15 +29,16 @@
     "test:admin": "bun run --cwd src/admin test",
     "test:widget": "bun run --cwd src/widget test",
     "migrate": "bun run --cwd src/server migrate",
+    "reset-password": "bun run --cwd src/server reset-password",
     "knip": "knip",
     "format": "prettier --ignore-path .prettierignore --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --ignore-path .prettierignore --check \"**/*.{ts,tsx,js,jsx,json,css,md}\""
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "@types/node": "^25.8.0",
+    "@types/node": "^25.9.5",
     "knip": "^5.88.1",
-    "prettier": "^3.8.3",
+    "prettier": "^3.9.6",
     "typescript": "^6.0.3"
   },
   "overrides": {

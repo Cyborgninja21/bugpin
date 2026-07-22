@@ -66,6 +66,8 @@ import {
 } from '../../lib/reportExport';
 import { CopySectionButton } from '../../components/report/CopySectionButton';
 import { ExportDiagnosticsMenu } from '../../components/report/ExportDiagnosticsMenu';
+import { ActivityDialog } from '../../components/report/ActivityDialog';
+import { useReportHistory } from '../../hooks/useReportHistory';
 import type { AppSettings, Project, Report, ReportSource, User } from '@shared/types';
 
 const UNASSIGNED_VALUE = '__unassigned__';
@@ -157,6 +159,8 @@ export function ReportDetail() {
     isSending,
   } = useReporterMessages(id ?? '');
 
+  const { data: reportHistory = [], isLoading: historyLoading } = useReportHistory(id);
+
   const forwardMutation = useForwardReport();
 
   const retrySyncMutation = useMutation({
@@ -184,6 +188,7 @@ export function ReportDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['report', id] });
+      queryClient.invalidateQueries({ queryKey: ['report-history', id] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
       queryClient.invalidateQueries({ queryKey: ['recent-reports'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
@@ -402,6 +407,7 @@ export function ReportDetail() {
           <h1 className="text-2xl font-bold">{report.title}</h1>
         </div>
         <div className="flex gap-2">
+          <ActivityDialog entries={reportHistory} isLoading={historyLoading} />
           <ExportDiagnosticsMenu report={report} />
           {canEdit && isAdmin && activeIntegrations.length > 0 && (
             <DropdownMenu>

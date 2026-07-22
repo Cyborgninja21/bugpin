@@ -68,7 +68,7 @@ export function defaultExportOptions(permalink: string): ExportOptions {
 
 export function buildPermalink(reportId: string, origin?: string): string {
   const base = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
-  return `${base}/reports/${reportId}`;
+  return `${base}/admin/reports/${reportId}`;
 }
 
 interface NormalizedReport {

@@ -206,6 +206,32 @@ describe('reports routes', () => {
     expect(reportUpdatePayload).toMatchObject({ title: 'New title' });
   });
 
+  it('ignores forwardedTo on report update mass-assignment', async () => {
+    userRole = 'editor';
+    const app = createApp();
+    const res = await app.request('http://localhost/reports/rpt_1', {
+      method: 'PATCH',
+      headers: {
+        cookie: 'session=sess_1',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Still allowed',
+        forwardedTo: [
+          {
+            integrationId: 'int_fake',
+            externalId: '999',
+            externalUrl: 'https://evil.example/issues/999',
+            forwardedAt: '2026-07-09T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(reportUpdatePayload).toMatchObject({ title: 'Still allowed' });
+    expect(reportUpdatePayload).not.toHaveProperty('forwardedTo');
+  });
+
   it('blocks delete for non-admin', async () => {
     userRole = 'viewer';
     const app = createApp();

@@ -420,4 +420,17 @@ describe('users routes', () => {
     });
     expect(res.status).toBe(200);
   });
+
+  it('rejects avatar path traversal attempts', async () => {
+    const outside = path.join(config.avatarsDir, 'outside.txt');
+    fs.mkdirSync(config.avatarsDir, { recursive: true });
+    fs.writeFileSync(outside, 'SECRET');
+
+    const app = createApp();
+    const res = await app.request('http://localhost/users/me/avatar/%2e%2e%2foutside.txt', {
+      headers: { cookie: 'session=sess_1' },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain('SECRET');
+  });
 });

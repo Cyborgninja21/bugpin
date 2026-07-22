@@ -245,15 +245,16 @@ export const invitationsService = {
     // Hash password
     const passwordHash = await hashPassword(input.password);
 
-    // Accept invitation
+    // Accept invitation (token must still be unconsumed — loses the race otherwise)
     const user = await usersRepo.acceptInvitation(
       userWithToken.id,
+      input.token,
       passwordHash,
       input.name.trim()
     );
 
     if (!user) {
-      return Result.fail('Failed to accept invitation', 'ACCEPT_FAILED');
+      return Result.fail('Invitation has already been accepted', 'ALREADY_ACCEPTED');
     }
 
     // Create session for auto-login

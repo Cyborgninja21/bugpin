@@ -12,6 +12,7 @@ import { githubSyncService } from '../../src/server/services/integrations/github
 import { syncQueueService } from '../../src/server/services/integrations/sync-queue.service';
 import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { usersService } from '../../src/server/services/users.service';
+import { reportHistoryService } from '../../src/server/services/report-history.service';
 import { Result } from '../../src/server/utils/result';
 import { config } from '../../src/server/config';
 import type { Report, ReportMetadata, Project, AppSettings } from '../../src/shared/types';
@@ -67,6 +68,7 @@ const originalNotificationsService = { ...notificationsService };
 const originalGithubSyncService = { ...githubSyncService };
 const originalSyncQueueService = { ...syncQueueService };
 const originalUsersService = { ...usersService };
+const originalReportHistoryService = { ...reportHistoryService };
 const originalSettingsCacheGetAll = settingsCacheService.getAll.bind(settingsCacheService);
 const originalConfig = { ...config };
 let tempDir = '';
@@ -182,6 +184,8 @@ beforeEach(() => {
     syncQueueCalls.push({ reportId, integrationId });
   };
 
+  reportHistoryService.record = async () => undefined;
+
   settingsCacheService.getAll = async () => ({ screenshot: { maxScreenshotSize: 10, useScreenCaptureAPI: false } } as AppSettings);
 });
 
@@ -193,6 +197,7 @@ afterEach(() => {
   Object.assign(githubSyncService, originalGithubSyncService);
   Object.assign(syncQueueService, originalSyncQueueService);
   Object.assign(usersService, originalUsersService);
+  Object.assign(reportHistoryService, originalReportHistoryService);
   settingsCacheService.getAll = originalSettingsCacheGetAll;
   resetEEHooks();
 });

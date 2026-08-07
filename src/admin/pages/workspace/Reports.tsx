@@ -137,6 +137,7 @@ export function Reports() {
   const projectId = searchParams.get('projectId') || '';
   const assignedTo = searchParams.get('assignedTo') || '';
   const source = searchParams.get('source') || '';
+  const reportType = searchParams.get('reportType') || '';
 
   // Fetch projects for filter
   const { data: projectsData } = useQuery({
@@ -159,7 +160,16 @@ export function Reports() {
   const { data, isLoading } = useQuery({
     queryKey: [
       'reports',
-      { page, status, priority, projectId, assignedTo, source, search: searchParams.get('search') },
+      {
+        page,
+        status,
+        priority,
+        projectId,
+        assignedTo,
+        source,
+        reportType,
+        search: searchParams.get('search'),
+      },
     ],
     queryFn: async () => {
       const params: Record<string, string> = { page: String(page), limit: '20' };
@@ -168,6 +178,7 @@ export function Reports() {
       if (projectId) params.projectId = projectId;
       if (assignedTo) params.assignedTo = assignedTo;
       if (source) params.source = source;
+      if (reportType) params.reportType = reportType;
       if (searchParams.get('search')) params.search = searchParams.get('search')!;
 
       const response = await api.get('/reports', { params });
@@ -484,6 +495,22 @@ export function Reports() {
                 <SelectItem value="all">All Sources</SelectItem>
                 <SelectItem value="widget">Widget</SelectItem>
                 <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={reportType || 'all'}
+              onValueChange={(value) => handleFilterChange('reportType', value)}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="bug">Bug</SelectItem>
+                <SelectItem value="feature">Feature request</SelectItem>
+                <SelectItem value="question">Question</SelectItem>
+                <SelectItem value="task">Task</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -860,6 +887,7 @@ export function Reports() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <StatusBadge status={report.status} />
+                      <TypeBadge reportType={report.reportType} />
                       <PriorityBadge priority={report.priority} />
                       <span className="text-xs text-muted-foreground">
                         {report.projectName || 'Unknown'}
@@ -1041,6 +1069,21 @@ function PriorityBadge({ priority }: { priority: string }) {
   return (
     <Badge variant="outline" className={`priority-${priority} uppercase text-xs`}>
       {priority}
+    </Badge>
+  );
+}
+
+function TypeBadge({ reportType }: { reportType?: string }) {
+  const labels: Record<string, string> = {
+    bug: 'Bug',
+    feature: 'Feature',
+    question: 'Question',
+    task: 'Task',
+  };
+  const type = reportType || 'bug';
+  return (
+    <Badge variant="outline" className="text-xs">
+      {labels[type] || type}
     </Badge>
   );
 }

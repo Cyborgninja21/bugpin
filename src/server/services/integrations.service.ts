@@ -135,6 +135,25 @@ export const integrationsService = {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
 
+    // Preserve masked/blank secrets. Reads (getById/list) return secrets masked
+    // (e.g. "ghp_****wxyz"), so a caller that edits other fields — labels,
+    // repoRoutes, owner/repo — and re-submits the config without re-entering the
+    // token sends the mask back. Never persist a masked or blank secret over the
+    // real one: substitute the existing value field-by-field before validating.
+    if (input.config !== undefined) {
+      const incoming = input.config as unknown as Record<string, unknown>;
+      const current = existing.config as unknown as Record<string, unknown>;
+      for (const key of ['accessToken', 'apiToken', 'webhookUrl', 'webhookSecret']) {
+        const keep = current[key];
+        if (keep === undefined) continue;
+        const v = incoming[key];
+        const masked = typeof v === 'string' && (v.trim() === '' || v.includes('****'));
+        if (v === undefined || masked) {
+          incoming[key] = keep;
+        }
+      }
+    }
+
     // Validate name if provided
     if (input.name !== undefined) {
       if (input.name.trim().length < 2) {

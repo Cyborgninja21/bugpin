@@ -190,6 +190,7 @@ async function loadDraft(
 
   return {
     formData: formDraft?.formData || {
+      reportType: 'bug',
       title: '',
       description: '',
       priority: 'medium',

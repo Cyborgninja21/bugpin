@@ -146,6 +146,7 @@ export async function initSchema(): Promise<void> {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       source TEXT DEFAULT 'widget' NOT NULL CHECK(source IN ('widget', 'manual')),
+      report_type TEXT DEFAULT 'bug' NOT NULL CHECK(report_type IN ('bug', 'feature', 'question', 'task')),
       title TEXT NOT NULL,
       description TEXT,
       status TEXT DEFAULT 'open' NOT NULL CHECK(status IN ('open', 'in_progress', 'resolved', 'closed')),
@@ -184,10 +185,17 @@ export async function initSchema(): Promise<void> {
     // Column already exists
   }
 
+  try {
+    db.exec(`ALTER TABLE reports ADD COLUMN report_type TEXT NOT NULL DEFAULT 'bug'`);
+  } catch {
+    // Column already exists
+  }
+
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project ON reports(project_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_priority ON reports(priority)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_source ON reports(source)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_report_type ON reports(report_type)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at DESC)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_assigned_to ON reports(assigned_to)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_project_status ON reports(project_id, status)`);
@@ -458,8 +466,11 @@ export async function runMigrations(): Promise<void> {
         logger.info('Migration applied successfully', { file });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const isBootstrapColumnConflict =
-          file === '003_add_reporter_locale.sql' && message.includes('duplicate column name');
+        // Some additive column migrations are also bootstrapped by initSchema()
+        // (base CREATE TABLE + idempotent ALTER) so fresh installs already have
+        // the column. Treat a "duplicate column name" error from such a
+        // migration as already-applied rather than fatal.
+        const isBootstrapColumnConflict = message.includes('duplicate column name');
         if (isBootstrapColumnConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
           logger.info('Migration already applied by schema bootstrap, recorded as applied', {

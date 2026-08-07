@@ -6,8 +6,19 @@ import { Button, Input, Textarea, Select, Label, Tabs } from './ui';
 import { ScreenCaptureConsentDialog } from './ScreenCaptureConsentDialog.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { t } from '../i18n/index.js';
+import type { ReportType } from '@shared/types';
+
+// Display labels for the report-type picker. (i18n keys are a follow-up; these
+// are the English defaults used when a project enables more than one type.)
+const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  bug: 'Bug',
+  feature: 'Feature request',
+  question: 'Question',
+  task: 'Task',
+};
 
 export interface FormData {
+  reportType: ReportType;
   title: string;
   description: string;
   priority: 'lowest' | 'low' | 'medium' | 'high' | 'highest';
@@ -26,6 +37,8 @@ interface WidgetDialogProps {
   isSubmitting: boolean;
   isCapturing: boolean;
   enableAnnotation: boolean;
+  // Report types the project offers. A picker is shown only when >1 is enabled.
+  enabledReportTypes: ReportType[];
   // Controlled state props (lifted to App for persistence across capture)
   activeTab: string;
   onActiveTabChange: (tab: string) => void;
@@ -58,6 +71,7 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   isSubmitting,
   isCapturing,
   enableAnnotation,
+  enabledReportTypes,
   activeTab,
   onActiveTabChange,
   formData,
@@ -162,6 +176,24 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
                   class="flex-auto min-h-0 overflow-y-auto p-6 flex flex-col gap-4"
                   onSubmit={handleSubmit}
                 >
+                  {/* Report type (only when the project enables more than one) */}
+                  {enabledReportTypes.length > 1 && (
+                    <div class="flex flex-col gap-1.5">
+                      <Label for="bugpin-report-type">Type</Label>
+                      <Select
+                        id="bugpin-report-type"
+                        value={formData.reportType}
+                        onChange={(e) =>
+                          handleInputChange('reportType', (e.target as HTMLSelectElement).value)
+                        }
+                      >
+                        {enabledReportTypes.map((rt) => (
+                          <option value={rt}>{REPORT_TYPE_LABELS[rt]}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  )}
+
                   {/* Title */}
                   <div class="flex flex-col gap-1.5">
                     <Label for="bugpin-title-input" required>

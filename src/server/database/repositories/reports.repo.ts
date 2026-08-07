@@ -7,6 +7,7 @@ import type {
   ReportFilter,
   ReportStatus,
   ReportPriority,
+  ReportType,
   ReportMetadata,
   GitHubSyncStatus,
   LocaleCode,
@@ -19,6 +20,7 @@ interface ReportRow {
   id: string;
   project_id: string;
   source: 'widget' | 'manual';
+  report_type: ReportType;
   title: string;
   description: string | null;
   status: ReportStatus;
@@ -69,6 +71,7 @@ function mapRowToReport(row: ReportRow & { project_name?: string }): Report {
     projectId: row.project_id,
     projectName: row.project_name ?? undefined,
     source: row.source ?? 'widget',
+    reportType: row.report_type ?? 'bug',
     title: row.title,
     description: row.description ?? undefined,
     status: row.status,
@@ -112,14 +115,15 @@ export const reportsRepo = {
 
     db.run(
       `INSERT INTO reports (
-        id, project_id, source, title, description, status, priority,
+        id, project_id, source, report_type, title, description, status, priority,
         annotations, metadata, reporter_email, reporter_name, reporter_locale, assigned_to,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.projectId,
         data.source ?? 'widget',
+        data.reportType ?? 'bug',
         data.title,
         data.description ?? null,
         'open',
@@ -179,6 +183,12 @@ export const reportsRepo = {
     if (filter.source) {
       conditions.push('source = ?');
       params.push(filter.source);
+    }
+
+    if (filter.reportType && filter.reportType.length > 0) {
+      const placeholders = filter.reportType.map(() => '?').join(', ');
+      conditions.push(`report_type IN (${placeholders})`);
+      params.push(...filter.reportType);
     }
 
     if (filter.status && filter.status.length > 0) {

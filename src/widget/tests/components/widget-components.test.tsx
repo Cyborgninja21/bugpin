@@ -211,9 +211,11 @@ describe('widget components', () => {
         isSubmitting={false}
         isCapturing={false}
         enableAnnotation={true}
+        enabledReportTypes={['bug']}
         activeTab="details"
         onActiveTabChange={() => undefined}
         formData={{
+          reportType: 'bug',
           title: '',
           description: '',
           priority: 'medium',
@@ -247,9 +249,11 @@ describe('widget components', () => {
         isSubmitting={false}
         isCapturing={false}
         enableAnnotation={true}
+        enabledReportTypes={['bug']}
         activeTab="media"
         onActiveTabChange={() => undefined}
         formData={{
+          reportType: 'bug',
           title: '',
           description: '',
           priority: 'medium',
@@ -283,9 +287,11 @@ describe('widget components', () => {
         isSubmitting={true}
         isCapturing={false}
         enableAnnotation={true}
+        enabledReportTypes={['bug']}
         activeTab="details"
         onActiveTabChange={() => undefined}
         formData={{
+          reportType: 'bug',
           title: 'Valid title',
           description: '',
           priority: 'medium',

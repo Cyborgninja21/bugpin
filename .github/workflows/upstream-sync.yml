@@ -1,0 +1,58 @@
+name: upstream-sync
+# Keeps the pristine `vendor` branch fast-forwarded to aranticlabs/bugpin@main
+# and opens a vendor -> main PR so upstream changes land through review rather
+# than silently overwriting our fork's additions (report types, per-type GitHub
+# routing, the Keep notification push).
+#
+# Same shape as prox-palantiri/.github/workflows/upstream-sync.yml.
+#
+# Requires (one-time, repo Settings -> Actions -> General -> Workflow permissions):
+#   * Read and write permissions
+#   * Allow GitHub Actions to create and approve pull requests
+on:
+  schedule:
+    - cron: '23 6 * * *'      # daily 06:23 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward pristine `vendor` from upstream
+        run: |
+          set -euo pipefail
+          git config user.name  "upstream-sync[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/aranticlabs/bugpin.git
+          git fetch upstream --tags
+          git checkout vendor
+          git merge --ff-only upstream/main
+          git push origin vendor --tags
+
+      - name: Open (or update) vendor -> main PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main vendor
+          # Only act when `vendor` carries commits `main` doesn't (upstream
+          # actually advanced). main being ahead of vendor (our fork's own
+          # commits) is the normal steady state and must NOT open a PR.
+          ahead=$(git rev-list --count origin/main..origin/vendor)
+          if [ "$ahead" -eq 0 ]; then
+            echo "vendor has no commits ahead of main — nothing to sync."; exit 0
+          fi
+          echo "vendor is $ahead commit(s) ahead of main — opening sync PR."
+          git push -f origin origin/vendor:refs/heads/sync/upstream
+          gh pr create -B main -H sync/upstream \
+            --title "Upstream sync $(date +%F)" \
+            --body "Automated fast-forward of \`vendor\` from aranticlabs/bugpin@main ($ahead new commit(s)). Review for conflicts with the fork's local changes (report types, per-type GitHub routing, Keep notification push), then merge." \
+            2>/dev/null || echo "PR already open for sync/upstream"

@@ -16,6 +16,7 @@ interface PendingReport {
   id: string;
   apiKey: string;
   serverUrl: string;
+  reportType?: string;
   title: string;
   description?: string;
   priority: string;
@@ -196,6 +197,7 @@ async function submitReport(report: PendingReport): Promise<boolean> {
     formData.append(
       'data',
       JSON.stringify({
+        reportType: report.reportType,
         title: report.title,
         description: report.description,
         priority: report.priority,

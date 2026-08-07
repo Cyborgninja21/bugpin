@@ -9,7 +9,7 @@ import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { resolveSubmitLocale } from '../../utils/locale.js';
 import { tooltipLauncherDefaults } from '../../i18n/tooltip-defaults.js';
-import type { LauncherTextBundle, ReportMetadata } from '@shared/types';
+import type { LauncherTextBundle, ReportMetadata, ReportType } from '@shared/types';
 
 const widget = new Hono();
 
@@ -23,6 +23,7 @@ function sanitizeForDisplay(value: string): string {
 // Validation Schemas
 
 const submitReportSchema = z.object({
+  reportType: z.enum(['bug', 'feature', 'question', 'task']).default('bug'),
   title: z.string().min(4, 'Title must be at least 4 characters').max(200),
   description: z.string().optional(),
   priority: z.enum(['lowest', 'low', 'medium', 'high', 'highest']).default('medium'),
@@ -288,9 +289,26 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     projectDefault: effectiveLanguage?.defaultLanguage,
   });
 
+  // Validate the report type against the project's enabled types. An unset
+  // config means only the default 'bug' type is accepted.
+  const enabledTypes: ReportType[] = projectResult.value.settings?.reportTypes?.enabled?.length
+    ? projectResult.value.settings.reportTypes.enabled
+    : ['bug'];
+  if (!enabledTypes.includes(data.reportType)) {
+    return c.json(
+      {
+        success: false,
+        error: 'INVALID_REPORT_TYPE',
+        message: `Report type "${sanitizeForDisplay(data.reportType)}" is not enabled for this project.`,
+      },
+      400
+    );
+  }
+
   // Create report via service
   const result = await reportsService.create({
     apiKey,
+    reportType: data.reportType,
     title: data.title,
     description: data.description,
     priority: data.priority,
@@ -491,6 +509,15 @@ widget.get('/config/:apiKey', async (c) => {
       language: {
         mode: projLanguage.mode,
         defaultLanguage: projLanguage.defaultLanguage,
+      },
+      reportTypes: {
+        enabled: project.settings?.reportTypes?.enabled?.length
+          ? project.settings.reportTypes.enabled
+          : (['bug'] as ReportType[]),
+        default:
+          project.settings?.reportTypes?.default ??
+          project.settings?.reportTypes?.enabled?.[0] ??
+          ('bug' as ReportType),
       },
     },
   });

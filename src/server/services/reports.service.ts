@@ -7,6 +7,7 @@ import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import { notificationsService } from './notifications.service.js';
+import { keepService } from './keep.service.js';
 import { githubSyncService } from './integrations/github-sync.service.js';
 import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
@@ -16,6 +17,7 @@ import type {
   ReportFilter,
   ReportStatus,
   ReportPriority,
+  ReportType,
   ReportMetadata,
   ReportSource,
   ManualReportChannel,
@@ -36,6 +38,7 @@ export interface MediaFile {
 
 export interface CreateReportInput {
   apiKey: string;
+  reportType?: ReportType;
   title: string;
   description?: string;
   priority?: ReportPriority;
@@ -49,6 +52,7 @@ export interface CreateReportInput {
 
 export interface CreateManualReportInput {
   projectId: string;
+  reportType?: ReportType;
   title: string;
   description?: string;
   priority?: ReportPriority;
@@ -223,6 +227,7 @@ async function createForProject(
     ? NonNullable<T>
     : never,
   input: {
+    reportType?: ReportType;
     title: string;
     description?: string;
     priority?: ReportPriority;
@@ -268,6 +273,7 @@ async function createForProject(
   const reportData: CreateReportData = {
     projectId: project.id,
     source: options.source,
+    reportType: input.reportType ?? 'bug',
     title: input.title.trim(),
     description: normalizeOptionalText(input.description),
     priority: input.priority ?? 'medium',
@@ -312,6 +318,15 @@ async function createForProject(
 
   notificationsService.notifyNewReport(report).catch((error) => {
     logger.error('Failed to send email notification for new report', error, {
+      reportId: report.id,
+    });
+  });
+
+  // Homelab fork: push the report to the Keep notification hub immediately.
+  // Deliberately independent of the GitHub sync below — a broken forward path
+  // is precisely what this notification exists to surface. Fail-open.
+  keepService.notifyNewReport(report, project.name).catch((error) => {
+    logger.error('Failed to send Keep notification for new report', error, {
       reportId: report.id,
     });
   });
@@ -368,6 +383,7 @@ export const reportsService = {
     return createForProject(
       project,
       {
+        reportType: input.reportType,
         title: input.title,
         description: input.description,
         priority: input.priority,
@@ -409,6 +425,7 @@ export const reportsService = {
     return createForProject(
       project,
       {
+        reportType: input.reportType,
         title: input.title,
         description: input.description,
         priority: input.priority,

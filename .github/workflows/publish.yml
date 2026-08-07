@@ -84,6 +84,16 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
+          # org.opencontainers.image.source is LOAD-BEARING, not decoration: it
+          # is what links the GHCR package to this repository, and an unlinked
+          # user-scoped package rejects GITHUB_TOKEN pushes with
+          # "denied: permission_denied: write_package". The package was
+          # originally created by a hand push with no label, so the first CI run
+          # failed exactly this way until a labelled push relinked it.
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=BugPin (homelab fork): report types, per-type GitHub routing, Keep notification push
+            org.opencontainers.image.licenses=AGPL-3.0-only
           build-args: |
             APP_VERSION=${{ github.sha }}
           cache-from: type=gha

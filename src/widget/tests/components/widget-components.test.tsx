@@ -63,6 +63,7 @@ const baseConfig: WidgetConfig = {
   maxScreenshotSize: 5 * 1024 * 1024,
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
+  reportTypes: { enabled: ['bug'], default: 'bug' },
 };
 
 const mediaItem: CapturedMedia = {

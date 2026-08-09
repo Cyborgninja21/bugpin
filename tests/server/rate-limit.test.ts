@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   apiKeyGenerator,
+  apiKeyAndClientGenerator,
   clearAllRateLimits,
   dynamicRateLimiter,
   getRateLimitInfo,
@@ -175,5 +176,42 @@ describe('rate limit store helpers', () => {
     expect(await getRateLimitInfo('key:reset', 10)).toBeNull();
     clearAllRateLimits();
     expect(await getRateLimitInfo('key:reset', 10)).toBeNull();
+  });
+});
+
+// Homelab fork — one widget key is injected fleet-wide, so bucketing on the key
+// alone gives every visitor a single shared budget. These lock the split.
+describe('apiKeyAndClientGenerator', () => {
+  it('separates clients that share one api key', () => {
+    const mk = (ip: string) => ({
+      req: {
+        header: (name: string) =>
+          name === 'x-api-key' ? 'proj_shared' : name === 'x-forwarded-for' ? ip : undefined,
+        query: () => undefined,
+        url: 'https://bugpin.example.com/api/widget/submit',
+      },
+    });
+    const a = apiKeyAndClientGenerator(mk('203.0.113.1') as unknown as never);
+    const b = apiKeyAndClientGenerator(mk('203.0.113.2') as unknown as never);
+    expect(a).not.toBe(b);
+    expect(a).toContain('proj_shared');
+  });
+
+  it('still buckets the same client+key together', () => {
+    const mk = () => ({
+      req: {
+        header: (name: string) =>
+          name === 'x-api-key'
+            ? 'proj_shared'
+            : name === 'x-forwarded-for'
+              ? '203.0.113.9'
+              : undefined,
+        query: () => undefined,
+        url: 'https://bugpin.example.com/api/widget/submit',
+      },
+    });
+    expect(apiKeyAndClientGenerator(mk() as unknown as never)).toBe(
+      apiKeyAndClientGenerator(mk() as unknown as never)
+    );
   });
 });

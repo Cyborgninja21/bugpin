@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { reportsService } from '../../services/reports.service.js';
 import { projectsService } from '../../services/projects.service.js';
 import { settingsService } from '../../services/settings.service.js';
-import { dynamicRateLimiter, apiKeyGenerator } from '../../middleware/rate-limit.js';
+import { dynamicRateLimiter, apiKeyAndClientGenerator } from '../../middleware/rate-limit.js';
 import { logger } from '../../utils/logger.js';
 import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
@@ -99,7 +99,10 @@ const submitReportSchema = z.object({
 
 // Submit Report
 
-widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), async (c) => {
+// Bucket per (project key + client), not per key alone: the widget key is public
+// and injected fleet-wide, so keying on it alone gives every visitor a single
+// shared 10/min budget. See apiKeyAndClientGenerator.
+widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyAndClientGenerator }), async (c) => {
   // Reject deprecated query parameter - API key must be in header
   if (c.req.query('apiKey')) {
     return c.json(
@@ -124,7 +127,8 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
 
   // Validate API key, project active status, and origin
   const origin = c.req.header('origin');
-  const projectResult = await projectsService.validateWidgetAccess(apiKey, origin);
+  // Write path: enforce the domain whitelist strictly (a missing Origin is rejected).
+  const projectResult = await projectsService.validateWidgetAccess(apiKey, origin, true);
 
   if (!projectResult.success) {
     const statusCode =

@@ -281,3 +281,67 @@ describe('projectsService.validateOrigin', () => {
     }
   });
 });
+
+// Homelab fork — the widget key is public (it ships in the injected script tag),
+// so the origin whitelist is the only gate on who may submit with it. These lock
+// that behaviour to the code.
+describe('validateWidgetAccess origin whitelist', () => {
+  it('rejects a submission whose Origin is not whitelisted', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { security: { allowedOrigins: ['epikos-kyklos.com'] } },
+    };
+    const result = await projectsService.validateWidgetAccess(
+      'proj_key',
+      'https://evil.example.com',
+      true
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a subdomain of a whitelisted apex', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { security: { allowedOrigins: ['epikos-kyklos.com'] } },
+    };
+    const result = await projectsService.validateWidgetAccess(
+      'proj_key',
+      'https://jellyseerr.epikos-kyklos.com',
+      true
+    );
+    expect(result.success).toBe(true);
+  });
+
+  // The bypass this fork closed: upstream skipped the whole whitelist when the
+  // header was absent, so `curl` without an Origin sailed past a configured
+  // whitelist that browsers could not evade.
+  it('rejects a WRITE with no Origin once a whitelist is configured', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { security: { allowedOrigins: ['epikos-kyklos.com'] } },
+    };
+    const result = await projectsService.validateWidgetAccess('proj_key', undefined, true);
+    expect(result.success).toBe(false);
+  });
+
+  // ...but the widget's own config fetch legitimately has no origin, and failing
+  // closed there would take the widget down everywhere instead of blocking abuse.
+  it('still allows an origin-less READ so the widget config keeps loading', async () => {
+    projectByApiKey = {
+      ...baseProject,
+      settings: { security: { allowedOrigins: ['epikos-kyklos.com'] } },
+    };
+    const result = await projectsService.validateWidgetAccess('proj_key');
+    expect(result.success).toBe(true);
+  });
+
+  it('is inert when no whitelist is configured', async () => {
+    projectByApiKey = { ...baseProject, settings: { security: { allowedOrigins: [] } } };
+    const result = await projectsService.validateWidgetAccess(
+      'proj_key',
+      'https://anywhere.example.com',
+      true
+    );
+    expect(result.success).toBe(true);
+  });
+});

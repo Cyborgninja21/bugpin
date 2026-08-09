@@ -1,8 +1,23 @@
 name: publish
-# Builds our BugPin fork and pushes a PRIVATE image to
-# ghcr.io/cyborgninja21/bugpin. The package inherits the repo's visibility.
-# Pulled by the homelab `bugpin-freyr-vm-fed-01` Komodo stack, which pins the
-# :sha tag in Homelab-Containers/prod/bugpin/.env-override.
+# Builds our BugPin fork and pushes to ghcr.io/cyborgninja21/bugpin-homelab.
+# The package inherits the repo's visibility. Pulled by the homelab
+# `bugpin-freyr-vm-fed-01` Komodo stack, which pins the :sha tag in
+# Homelab-Containers/prod/bugpin/.env-override.
+#
+# WHY `-homelab` AND NOT PLAIN `bugpin`:
+#   The plain `bugpin` package was created in June 2026 by a HAND `docker push`.
+#   A user-scoped GHCR package created outside Actions is not linked to any
+#   repository and grants no repo write access, so this workflow's GITHUB_TOKEN
+#   got `denied: permission_denied: write_package`. Adding
+#   org.opencontainers.image.source linked the package but did NOT grant access
+#   — that needs a separate "Manage Actions access" entry that exists only in
+#   the web UI (no REST endpoint), and deleting the package to start over needs
+#   a `delete:packages` scope we do not have.
+#   A package that Actions creates itself is linked AND granted automatically,
+#   which is why every other homelab fork package works. So: publish under a
+#   name CI owns from birth. The old `bugpin` package is orphaned — its last
+#   tag is the hand-built 51b928cb… — and can be deleted from the UI whenever
+#   convenient. Do NOT "simplify" this back to `bugpin`; it will 403.
 #
 # Matches the house pattern used by the other homelab forks
 # (prox-palantiri/build-*.yml, Utumno-conan-exiles-panel/publish.yml):
@@ -35,7 +50,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/cyborgninja21/bugpin
+  IMAGE: ghcr.io/cyborgninja21/bugpin-homelab
 
 jobs:
   typecheck:

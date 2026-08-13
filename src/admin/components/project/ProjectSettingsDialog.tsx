@@ -390,7 +390,7 @@ export function ProjectSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] min-h-[67vh]">
+      <DialogContent className="max-w-4xl h-[85vh]">
         <DialogHeader>
           <DialogTitle>Project Settings</DialogTitle>
           <DialogDescription>Configure settings for "{project.name}"</DialogDescription>

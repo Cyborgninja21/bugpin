@@ -82,6 +82,15 @@ describe('AnnotationCanvas', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
+    const canvasRegion = container.querySelector('canvas')?.parentElement;
+    const annotationRoot = canvasRegion?.parentElement;
+
+    expect(annotationRoot?.classList.contains('h-full')).toBe(true);
+    expect(annotationRoot?.classList.contains('min-h-0')).toBe(true);
+    expect(canvasRegion?.classList.contains('flex-auto')).toBe(true);
+    expect(canvasRegion?.classList.contains('min-h-0')).toBe(true);
+    expect(canvasRegion?.classList.contains('min-h-[600px]')).toBe(false);
+
     const buttons = Array.from(container.querySelectorAll('button'));
     const cancelButton = buttons.find((btn) => btn.textContent?.trim() === 'Cancel');
     const doneButton = buttons.find((btn) => btn.textContent?.trim() === 'Done');

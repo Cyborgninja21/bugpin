@@ -1,10 +1,23 @@
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import tailwindcss from '@tailwindcss/vite';
+import dts from 'vite-plugin-dts';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [preact(), tailwindcss()],
+  plugins: [
+    preact(),
+    tailwindcss(),
+    dts({
+      include: ['**/*.ts', '**/*.tsx', '../shared/**/*.ts'],
+      exclude: ['tests/**', 'node_modules/**', 'dist/**', 'vite.config.ts'],
+      rollupTypes: true,
+      tsconfigPath: './tsconfig.json',
+      compilerOptions: {
+        rootDir: path.resolve(__dirname, '..'),
+      },
+    }),
+  ],
   root: '.',
   resolve: {
     alias: {

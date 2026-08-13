@@ -100,11 +100,6 @@ export default defineConfig({
     css: true,
     // Use threads pool instead of forks to avoid stack overflow issues with coverage
     pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: false,
-      },
-    },
     testTimeout: 10000,
     coverage: {
       provider: 'v8',

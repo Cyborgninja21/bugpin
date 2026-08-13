@@ -8,7 +8,7 @@ Embeddable visual bug reporting widget for web applications. Capture screenshots
 - **Annotation Tools** - Draw, highlight, blur, and add text
 - **Privacy First** - Self-hosted, your data stays on your servers
 - **Customizable** - Match your brand colors and style
-- **Lightweight** - Less than 150KB gzipped
+- **Lightweight** - Less than 175KB gzipped
 - **Dark Mode** - Automatic theme detection
 - **Responsive** - Works on all devices
 - **Multilingual** - Translated into 8 languages (English, German, French, Dutch, Spanish, Italian, Japanese, Simplified Chinese) with automatic detection from `<html lang>` or the visitor's browser
@@ -44,9 +44,9 @@ The widget automatically fetches its configuration from the BugPin server based 
 
 ### Optional Options
 
-| Option     | Type     | Description                                                                                                                        |
-| ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `language` | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default.    |
+| Option     | Type     | Description                                                                                                                     |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `language` | `string` | BCP 47 language code (e.g. `en`, `de`, `fr`, `nl`, `es`, `it`, `ja`, `zh`). Overrides auto-detection and the project's default. |
 
 ## Language
 

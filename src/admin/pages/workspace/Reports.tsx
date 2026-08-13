@@ -51,8 +51,13 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import { Search, RefreshCw, CheckCircle, AlertCircle, Trash2, X } from 'lucide-react';
+import { Search, RefreshCw, CheckCircle, AlertCircle, Trash2, X, Share2, ChevronDown } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
+import {
+  downloadReportsShare,
+  type ReportShareFormat,
+} from '../../lib/reportsShareExport';
+import { UNASSIGNED_FILTER } from '@shared/types';
 import {
   Tooltip,
   TooltipContent,
@@ -184,8 +189,6 @@ export function Reports() {
       const response = await api.get('/reports', { params });
       return response.data;
     },
-    refetchInterval: 2000,
-    refetchIntervalInBackground: false,
   });
 
   const createReportMutation = useMutation({
@@ -352,6 +355,24 @@ export function Reports() {
     bulkDeleteMutation.mutate(Array.from(selectedIds));
   };
 
+  const handleBulkShare = (format: ReportShareFormat) => {
+    const selectedReports =
+      data?.data?.filter((report: Report) => selectedIds.has(report.id)) ?? [];
+
+    if (selectedReports.length === 0) {
+      toast.error('No reports selected to share');
+      return;
+    }
+
+    try {
+      downloadReportsShare(selectedReports, format);
+      const label = format === 'excel' ? 'Excel' : 'CSV';
+      toast.success(`Shared ${selectedReports.length} reports as ${label}`);
+    } catch {
+      toast.error('Failed to share reports');
+    }
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams(searchParams);
@@ -372,6 +393,12 @@ export function Reports() {
       params.delete(key);
     }
     params.set('page', '1');
+    setSearchParams(params);
+  };
+
+  const handlePageChange = (nextPage: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', String(nextPage));
     setSearchParams(params);
   };
 
@@ -475,6 +502,7 @@ export function Reports() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Assignees</SelectItem>
+                  <SelectItem value={UNASSIGNED_FILTER}>Unassigned</SelectItem>
                   {assignableUsers.map((assignee) => (
                     <SelectItem key={assignee.id} value={assignee.id}>
                       <AssigneeDisplay user={assignee} compact />
@@ -603,6 +631,24 @@ export function Reports() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Share2 className="h-4 w-4 mr-1" />
+                      Share
+                      <ChevronDown className="h-4 w-4 ml-1 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleBulkShare('excel')}>
+                      Download Excel (.xlsx)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleBulkShare('csv')}>
+                      Download CSV (.csv)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 {/* Delete button */}
                 <Button
@@ -912,7 +958,7 @@ export function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleFilterChange('page', String(page - 1))}
+                onClick={() => handlePageChange(page - 1)}
                 disabled={page <= 1}
               >
                 Previous
@@ -920,7 +966,7 @@ export function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleFilterChange('page', String(page + 1))}
+                onClick={() => handlePageChange(page + 1)}
                 disabled={page >= data.totalPages}
               >
                 Next
@@ -1029,7 +1075,7 @@ export function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleFilterChange('page', String(page - 1))}
+                onClick={() => handlePageChange(page - 1)}
                 disabled={page <= 1}
               >
                 Previous
@@ -1037,7 +1083,7 @@ export function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleFilterChange('page', String(page + 1))}
+                onClick={() => handlePageChange(page + 1)}
                 disabled={page >= data.totalPages}
               >
                 Next

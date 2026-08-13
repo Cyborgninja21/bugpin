@@ -206,6 +206,23 @@ export async function initSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_reports_github_sync_status ON reports(github_sync_status) WHERE github_sync_status IS NOT NULL`
   );
 
+  // Report history table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS report_history (
+      id TEXT PRIMARY KEY,
+      report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL CHECK(action IN ('created', 'status_changed', 'priority_changed', 'assignee_changed')),
+      old_value TEXT,
+      new_value TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_report_history_report_id ON report_history(report_id)`);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_report_history_created_at ON report_history(report_id, created_at DESC)`
+  );
+
   // Files table
   db.exec(`
     CREATE TABLE IF NOT EXISTS files (
@@ -469,9 +486,14 @@ export async function runMigrations(): Promise<void> {
         // Some additive column migrations are also bootstrapped by initSchema()
         // (base CREATE TABLE + idempotent ALTER) so fresh installs already have
         // the column. Treat a "duplicate column name" error from such a
-        // migration as already-applied rather than fatal.
-        const isBootstrapColumnConflict = message.includes('duplicate column name');
-        if (isBootstrapColumnConflict) {
+        // migration as already-applied rather than fatal. Kept general (rather
+        // than naming 003) so the fork's own additive migrations are covered too.
+        //
+        // 004 bootstraps a TABLE, which fails with "already exists" instead.
+        const isBootstrapSchemaConflict =
+          message.includes('duplicate column name') ||
+          (file === '004_add_report_history.sql' && message.includes('already exists'));
+        if (isBootstrapSchemaConflict) {
           db.run('INSERT INTO migrations (name) VALUES (?)', [file]);
           logger.info('Migration already applied by schema bootstrap, recorded as applied', {
             file,

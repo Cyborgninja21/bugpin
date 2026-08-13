@@ -26,6 +26,17 @@ export interface LauncherTextBundle {
 export type ReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type ReportPriority = 'lowest' | 'low' | 'medium' | 'high' | 'highest';
 export type ReportSource = 'widget' | 'manual';
+
+/** URL/query value for filtering reports with no assignee */
+export const UNASSIGNED_FILTER = '__unassigned__';
+
+export type ReportHistoryAction =
+  | 'created'
+  | 'status_changed'
+  | 'priority_changed'
+  | 'assignee_changed';
+
+/** Fork: report types drive the per-type GitHub routing. */
 export type ReportType = 'bug' | 'feature' | 'question' | 'task';
 export const REPORT_TYPES: ReportType[] = ['bug', 'feature', 'question', 'task'];
 export type ManualReportChannel = 'email' | 'chat' | 'phone' | 'qa' | 'other';
@@ -711,5 +722,18 @@ export interface ReporterMessage {
   userName?: string;
   message: string;
   sentAt: string;
+  createdAt: string;
+}
+
+export interface ReportHistoryEntry {
+  id: string;
+  reportId: string;
+  userId?: string;
+  userName?: string;
+  action: ReportHistoryAction;
+  oldValue?: string;
+  newValue?: string;
+  oldDisplay?: string;
+  newDisplay?: string;
   createdAt: string;
 }

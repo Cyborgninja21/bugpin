@@ -314,9 +314,15 @@ export const usersRepo = {
   },
 
   /**
-   * Accept invitation: set password, clear token, mark as active
+   * Accept invitation: set password, clear token, mark as active.
+   * Consumes the token atomically so concurrent accepts cannot both succeed.
    */
-  async acceptInvitation(id: string, passwordHash: string, name?: string): Promise<User | null> {
+  async acceptInvitation(
+    id: string,
+    token: string,
+    passwordHash: string,
+    name?: string
+  ): Promise<User | null> {
     const db = getDb();
     const now = new Date().toISOString();
 
@@ -335,9 +341,19 @@ export const usersRepo = {
       params.push(name);
     }
 
-    params.push(id);
+    params.push(id, token);
 
-    db.run(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
+    const result = db.run(
+      `UPDATE users SET ${sets.join(', ')}
+       WHERE id = ?
+         AND invitation_token = ?
+         AND invitation_accepted_at IS NULL`,
+      params
+    );
+
+    if (result.changes === 0) {
+      return null;
+    }
 
     return this.findById(id);
   },

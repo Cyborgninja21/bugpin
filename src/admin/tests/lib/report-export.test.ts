@@ -105,7 +105,7 @@ function makeReport(overrides: Partial<Report> = {}): Report {
   };
 }
 
-const PERMALINK = 'https://bugpin.example.com/reports/abc123';
+const PERMALINK = 'https://bugpin.example.com/admin/reports/abc123';
 
 interface OptionsOverrides {
   sections?: Partial<ExportSectionToggles>;

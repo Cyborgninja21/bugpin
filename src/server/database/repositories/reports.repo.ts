@@ -13,6 +13,7 @@ import type {
   LocaleCode,
 } from '@shared/types';
 import { normalizeLocale } from '../../utils/locale.js';
+import { UNASSIGNED_FILTER } from '@shared/types';
 
 // Database Row Type
 
@@ -203,7 +204,9 @@ export const reportsRepo = {
       params.push(...filter.priority);
     }
 
-    if (filter.assignedTo) {
+    if (filter.assignedTo === UNASSIGNED_FILTER) {
+      conditions.push('assigned_to IS NULL');
+    } else if (filter.assignedTo) {
       conditions.push('assigned_to = ?');
       params.push(filter.assignedTo);
     }

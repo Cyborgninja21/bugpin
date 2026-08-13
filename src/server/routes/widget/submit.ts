@@ -207,12 +207,17 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyAndClientGenerat
 
   // Filter and prepare media files data
   const settings = await settingsCacheService.getAll();
-  const imageLimitMb = Math.max(
-    settings.screenshot.maxScreenshotSize ?? 10,
-    settings.screenshot.maxImageUploadSizeMb ?? 10
-  );
+  const projScreenshot = projectResult.value.settings?.screenshot;
+  const globalScreenshot = settings.screenshot;
+  const maxScreenshotMb =
+    projScreenshot?.maxScreenshotSize ?? globalScreenshot.maxScreenshotSize ?? 10;
+  const maxImageMb =
+    projScreenshot?.maxImageUploadSizeMb ?? globalScreenshot.maxImageUploadSizeMb ?? 10;
+  const maxVideoMb =
+    projScreenshot?.maxVideoUploadSizeMb ?? globalScreenshot.maxVideoUploadSizeMb ?? 50;
+  const imageLimitMb = Math.max(maxScreenshotMb, maxImageMb);
   const maxFileSizeBytes = imageLimitMb * 1024 * 1024;
-  const maxVideoSizeBytes = (settings.screenshot.maxVideoUploadSizeMb ?? 50) * 1024 * 1024;
+  const maxVideoSizeBytes = maxVideoMb * 1024 * 1024;
   const allowedTypes: readonly string[] = ALLOWED_MEDIA_MIME_TYPES;
 
   const media: Array<{ data: Buffer; filename: string; mimeType: string }> = [];

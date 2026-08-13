@@ -11,6 +11,7 @@ import { keepService } from './keep.service.js';
 import { githubSyncService } from './integrations/github-sync.service.js';
 import { syncQueueService } from './integrations/sync-queue.service.js';
 import { usersService } from './users.service.js';
+import { reportHistoryService } from './report-history.service.js';
 import { normalizeUrl } from '../utils/validators.js';
 import type {
   Report,
@@ -24,7 +25,6 @@ import type {
   PaginatedResponse,
   FileType,
   FileRecord,
-  ForwardedReference,
   LocaleCode,
 } from '@shared/types';
 
@@ -71,7 +71,6 @@ export interface UpdateReportInput {
   priority?: ReportPriority;
   assignedTo?: string | null;
   resolvedBy?: string;
-  forwardedTo?: ForwardedReference[];
 }
 
 async function validateAssignee(assignedTo: string | null | undefined): Promise<Result<void>> {
@@ -243,6 +242,7 @@ async function createForProject(
     requestedAssignee?: string | null;
     sendReporterSubmission: boolean;
     strictFileValidation: boolean;
+    createdByUserId?: string | null;
   }
 ): Promise<Result<Report>> {
   if (!input.title || input.title.trim().length < 4) {
@@ -307,6 +307,18 @@ async function createForProject(
     title: report.title,
     source: report.source,
   });
+
+  await reportHistoryService.record(report.id, options.createdByUserId ?? null, 'created');
+
+  if (assignedTo) {
+    await reportHistoryService.record(
+      report.id,
+      options.createdByUserId ?? null,
+      'assignee_changed',
+      null,
+      assignedTo
+    );
+  }
 
   getEEHooks()
     .onReportCreated(report)
@@ -439,6 +451,7 @@ export const reportsService = {
         requestedAssignee: input.assignedTo,
         sendReporterSubmission: false,
         strictFileValidation: true,
+        createdByUserId: userId,
       }
     );
   },
@@ -544,10 +557,6 @@ export const reportsService = {
       updates.assignedTo = input.assignedTo ?? undefined;
     }
 
-    if (input.forwardedTo !== undefined) {
-      updates.forwardedTo = input.forwardedTo;
-    }
-
     const report = await reportsRepo.update(id, updates);
 
     if (!report) {
@@ -564,8 +573,41 @@ export const reportsService = {
     if (input.priority !== undefined && input.priority !== existing.priority) {
       changes.priority = { old: existing.priority, new: input.priority };
     }
-    if (input.assignedTo !== undefined && input.assignedTo !== existing.assignedTo) {
-      changes.assignedTo = { old: existing.assignedTo, new: input.assignedTo };
+    const previousAssignee = existing.assignedTo ?? null;
+    const nextAssignee =
+      input.assignedTo !== undefined ? (input.assignedTo ?? null) : previousAssignee;
+    if (input.assignedTo !== undefined && nextAssignee !== previousAssignee) {
+      changes.assignedTo = { old: previousAssignee, new: nextAssignee };
+    }
+
+    if (changes.status) {
+      await reportHistoryService.record(
+        id,
+        userId ?? null,
+        'status_changed',
+        changes.status.old as string,
+        changes.status.new as string
+      );
+    }
+
+    if (changes.priority) {
+      await reportHistoryService.record(
+        id,
+        userId ?? null,
+        'priority_changed',
+        changes.priority.old as string,
+        changes.priority.new as string
+      );
+    }
+
+    if (changes.assignedTo) {
+      await reportHistoryService.record(
+        id,
+        userId ?? null,
+        'assignee_changed',
+        (changes.assignedTo.old as string | null) ?? null,
+        (changes.assignedTo.new as string | null) ?? null
+      );
     }
 
     // Trigger webhooks via EE hooks if there are changes (async, don't block)
@@ -716,42 +758,23 @@ export const reportsService = {
       return Result.fail('Cannot update more than 100 reports at once', 'TOO_MANY_IDS');
     }
 
-    const reportUpdates: Partial<Report> = {};
-
-    if (updates.status !== undefined) {
-      reportUpdates.status = updates.status;
-    }
-
-    if (updates.priority !== undefined) {
-      reportUpdates.priority = updates.priority;
-    }
-
     if (updates.assignedTo !== undefined) {
       const assigneeValidation = await validateAssignee(updates.assignedTo);
       if (!assigneeValidation.success) {
         return assigneeValidation;
       }
-
-      reportUpdates.assignedTo = updates.assignedTo ?? undefined;
     }
 
-    if (updates.assignedTo !== undefined) {
-      let count = 0;
+    let count = 0;
 
-      for (const id of ids) {
-        const result = await this.update(id, updates, userId);
-        if (result.success) {
-          count += 1;
-        }
+    for (const id of ids) {
+      const result = await this.update(id, updates, userId);
+      if (result.success) {
+        count += 1;
       }
-
-      logger.info('Bulk update completed', { count, updates: Object.keys(reportUpdates) });
-      return Result.ok(count);
     }
 
-    const count = await reportsRepo.bulkUpdate(ids, reportUpdates);
-
-    logger.info('Bulk update completed', { count, updates: Object.keys(reportUpdates) });
+    logger.info('Bulk update completed', { count, updates: Object.keys(updates) });
     return Result.ok(count);
   },
 

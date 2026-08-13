@@ -78,6 +78,60 @@ describe('Reports Page', () => {
       { timeout: 5000 }
     );
   });
+
+  it('navigates to the next page', async () => {
+    const requestedPages: string[] = [];
+    const user = userEvent.setup();
+
+    server.use(
+      http.get('/api/reports', ({ request }) => {
+        const url = new URL(request.url);
+        const page = url.searchParams.get('page') || '1';
+        requestedPages.push(page);
+
+        const reportTitle = page === '2' ? 'Second page issue' : 'First page issue';
+
+        return HttpResponse.json({
+          success: true,
+          data: [
+            {
+              id: `report-${page}`,
+              source: 'widget',
+              title: reportTitle,
+              status: 'open',
+              priority: 'medium',
+              projectId: 'project-1',
+              projectName: 'Test Project',
+              createdAt: '2024-01-15T10:30:00Z',
+              updatedAt: '2024-01-15T10:30:00Z',
+              metadata: { timestamp: '2024-01-15T10:30:00Z' },
+            },
+          ],
+          total: 21,
+          page: Number(page),
+          limit: 20,
+          totalPages: 2,
+        });
+      })
+    );
+
+    renderWithProviders(<Reports />, {
+      initialEntries: ['/reports?page=1'],
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('First page issue')[0]).toBeInTheDocument();
+    });
+
+    const nextButtons = screen.getAllByRole('button', { name: 'Next' });
+    await user.click(nextButtons[nextButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Second page issue')[0]).toBeInTheDocument();
+    });
+
+    expect(requestedPages).toContain('2');
+  });
 });
 
 describe('Reports Page - GitHub Sync Status', () => {
@@ -207,7 +261,32 @@ describe('Reports Page - Bulk Actions', () => {
     expect(screen.getByRole('button', { name: /Set Status/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Set Priority/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Assign/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Share/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
+  });
+
+  it('opens share dropdown with excel and csv options', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Reports />);
+
+    await waitFor(
+      () => {
+        expect(screen.getAllByText('Button not working')[0]).toBeInTheDocument();
+      },
+      { timeout: 5000 }
+    );
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    await user.click(checkboxes[1]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/1 report selected/)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Share/i }));
+
+    expect(await screen.findByText(/Download Excel/i)).toBeInTheDocument();
+    expect(screen.getByText(/Download CSV/i)).toBeInTheDocument();
   });
 
   it('filters reports by assignee', async () => {

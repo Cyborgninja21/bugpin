@@ -19,18 +19,32 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+class MockResizeObserver implements ResizeObserver {
+  constructor(_callback: ResizeObserverCallback) {}
+
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+
+globalThis.ResizeObserver = MockResizeObserver;
 
 // Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+class MockIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '';
+  readonly scrollMargin = '';
+  readonly thresholds = [];
+
+  constructor(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
+
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = vi.fn((): IntersectionObserverEntry[] => []);
+}
+
+globalThis.IntersectionObserver = MockIntersectionObserver;
 
 // Radix Select uses pointer capture APIs not implemented in jsdom
 const elementProto = HTMLElement.prototype as {

@@ -32,7 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <BrandingProvider>
             <AuthProvider>
               <App />
-              <Toaster position="top-right" richColors />
+              <Toaster position="bottom-right" richColors />
             </AuthProvider>
           </BrandingProvider>
         </ThemeProvider>

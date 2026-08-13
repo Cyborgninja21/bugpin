@@ -13,8 +13,16 @@ import type {
   ReporterNotificationSettings,
   ProjectLanguageSettings,
   LocaleCode,
+  ReportType,
 } from '@shared/types';
-import { SUPPORTED_LOCALES } from '@shared/types';
+import { SUPPORTED_LOCALES, REPORT_TYPES } from '@shared/types';
+
+const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  bug: 'Bug',
+  feature: 'Feature request',
+  question: 'Question',
+  task: 'Task',
+};
 import {
   Dialog,
   DialogBody,
@@ -112,6 +120,10 @@ export function ProjectSettingsDialog({
   const [useCustomWhitelist, setUseCustomWhitelist] = useState(false);
   const [whitelistSettings, setWhitelistSettings] = useState<string[]>([]);
 
+  // Report-type settings state
+  const [enabledReportTypes, setEnabledReportTypes] = useState<ReportType[]>(['bug']);
+  const [defaultReportType, setDefaultReportType] = useState<ReportType>('bug');
+
   // Language settings state
   const [languageSettings, setLanguageSettings] =
     useState<ProjectLanguageSettings>(DEFAULT_PROJECT_LANGUAGE);
@@ -206,6 +218,12 @@ export function ProjectSettingsDialog({
 
       // Default assignee
       setDefaultAssigneeUserId(projectDetail.settings?.defaultAssigneeUserId ?? null);
+
+      // Report-type settings
+      const rt = projectDetail.settings?.reportTypes;
+      const enabled: ReportType[] = rt?.enabled?.length ? rt.enabled : ['bug'];
+      setEnabledReportTypes(enabled);
+      setDefaultReportType(rt?.default ?? enabled[0] ?? 'bug');
 
       // Language settings
       setLanguageSettings(projectDetail.settings?.language ?? DEFAULT_PROJECT_LANGUAGE);
@@ -316,6 +334,12 @@ export function ProjectSettingsDialog({
 
       newSettings.defaultAssigneeUserId = defaultAssigneeUserId;
 
+      // Report-type settings
+      newSettings.reportTypes = {
+        enabled: enabledReportTypes.length ? enabledReportTypes : ['bug'],
+        default: enabledReportTypes.includes(defaultReportType) ? defaultReportType : 'bug',
+      };
+
       // Language settings
       newSettings.language = languageSettings;
 
@@ -404,6 +428,9 @@ export function ProjectSettingsDialog({
               </TabsTrigger>
               <TabsTrigger value="language" className="justify-start px-3 py-2">
                 Language
+              </TabsTrigger>
+              <TabsTrigger value="reportTypes" className="justify-start px-3 py-2">
+                Report Types
               </TabsTrigger>
             </TabsList>
 
@@ -641,6 +668,61 @@ export function ProjectSettingsDialog({
                         {SUPPORTED_LOCALES.map((code) => (
                           <SelectItem key={code} value={code}>
                             {LOCALE_DISPLAY_LABELS[code]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="reportTypes" className="mt-0">
+                <div className="space-y-5 rounded-xl border bg-card p-5">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Report Types</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Choose which kinds of reports the widget offers. When more than one is
+                      enabled, visitors pick a type in the form. Each type can be routed to its own
+                      GitHub labels/repo in this project's GitHub integration.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {REPORT_TYPES.map((rt) => (
+                      <div key={rt} className="flex items-center justify-between">
+                        <Label htmlFor={`rt-${rt}`} className="text-sm">
+                          {REPORT_TYPE_LABELS[rt]}
+                        </Label>
+                        <Switch
+                          id={`rt-${rt}`}
+                          checked={enabledReportTypes.includes(rt)}
+                          onCheckedChange={(on) =>
+                            setEnabledReportTypes((prev) => {
+                              const next = on ? [...prev, rt] : prev.filter((t) => t !== rt);
+                              return next.length ? next : ['bug'];
+                            })
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2 pt-2">
+                    <Label htmlFor="default-report-type" className="text-sm font-medium">
+                      Default Type
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Preselected when the widget opens.
+                    </p>
+                    <Select
+                      value={defaultReportType}
+                      onValueChange={(val) => setDefaultReportType(val as ReportType)}
+                    >
+                      <SelectTrigger id="default-report-type" className="h-11 max-w-xl">
+                        <SelectValue placeholder="Select default type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {enabledReportTypes.map((rt) => (
+                          <SelectItem key={rt} value={rt}>
+                            {REPORT_TYPE_LABELS[rt]}
                           </SelectItem>
                         ))}
                       </SelectContent>

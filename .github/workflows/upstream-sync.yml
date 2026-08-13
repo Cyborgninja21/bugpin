@@ -1,0 +1,110 @@
+name: upstream-sync
+# Keeps the pristine `vendor` branch fast-forwarded to aranticlabs/bugpin@main
+# and opens a vendor -> main PR so upstream changes land through review rather
+# than silently overwriting our fork's additions (report types, per-type GitHub
+# routing, the Keep notification push).
+#
+# Auto-merge: after opening/refreshing the PR this job arms GitHub native
+# auto-merge (MERGE COMMIT — see the arming step for why never squash). The
+# only required status check on main is `sync-gate` (sync-gate.yml), which
+# aggregates whatever actually ran on the PR head, so a conflict-free sync
+# whose checks are all green lands unattended; anything conflicted, red, or
+# wedged stays open for human review. Repo settings this relies on:
+# allow_auto_merge=true + branch protection requiring `sync-gate`.
+#
+# Methodology: "Upstream-Tracking Method for Private Repo Mirrors (Template)"
+#   https://outline.epikos-kyklos.com/doc/upstream-tracking-method-for-private-repo-mirrors-template-DlhYxxASR4
+#
+# Requires (one-time, repo Settings -> Actions -> General -> Workflow permissions):
+#   * Read and write permissions
+#   * Allow GitHub Actions to create and approve pull requests
+#
+# IMPORTANT — why a deploy key (not the built-in GITHUB_TOKEN):
+# Upstream (aranticlabs/bugpin) ships its own `.github/workflows/*` files. The
+# built-in GITHUB_TOKEN is a GitHub App token and is *categorically forbidden*
+# from pushing any ref that creates/updates workflow files (there is no
+# grantable `workflows:` permission). Mirroring those commits/tags therefore
+# fails with "refusing to allow a GitHub App to create or update workflow ...".
+# A write-enabled DEPLOY KEY is not subject to that restriction, so the push
+# steps below run over SSH using `secrets.UPSTREAM_SYNC_SSH_KEY` (scoped to this
+# repo only). The GITHUB_TOKEN is still used for `gh pr create`.
+on:
+  schedule:
+    - cron: '23 6 * * *'      # daily 06:23 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Write deploy key — required to push upstream's workflow files
+          # (GITHUB_TOKEN cannot). Configures `origin` over SSH.
+          ssh-key: ${{ secrets.UPSTREAM_SYNC_SSH_KEY }}
+
+      - name: Fast-forward pristine `vendor` from upstream
+        run: |
+          set -euo pipefail
+          git config user.name  "upstream-sync[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/aranticlabs/bugpin.git
+          # --force: a moved upstream tag makes a plain fetch exit 1 and kill
+          # the step. Tags are pushed separately for the same reason.
+          git fetch upstream --tags --force
+          git checkout vendor
+          git merge --ff-only upstream/main
+          git push origin vendor
+          git push origin --tags --force
+
+      - name: Open (or update) vendor -> main PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main vendor
+          # Only act when `vendor` carries commits `main` doesn't (upstream
+          # actually advanced). main being ahead of vendor (our fork's own
+          # commits) is the normal steady state and must NOT open a PR.
+          ahead=$(git rev-list --count origin/main..origin/vendor)
+          if [ "$ahead" -eq 0 ]; then
+            echo "vendor has no commits ahead of main — nothing to sync."; exit 0
+          fi
+          echo "vendor is $ahead commit(s) ahead of main — opening sync PR."
+          git push -f origin origin/vendor:refs/heads/sync/upstream
+          # Pin --repo to THIS fork. With an `upstream` remote present (added
+          # above), gh would otherwise default the PR base repo to the parent and
+          # fail with "No commits between main and sync/upstream". Create only if
+          # no PR is open yet; let any other gh error surface (no 2>/dev/null mask).
+          if [ -n "$(gh pr list -R "$GITHUB_REPOSITORY" -B main -H sync/upstream --state open --json number -q '.[].number')" ]; then
+            echo "Sync PR already open for sync/upstream — nothing to do."
+          else
+            gh pr create -R "$GITHUB_REPOSITORY" -B main -H sync/upstream \
+              --title "Upstream sync $(date +%F)" \
+              --body "Automated fast-forward of \`vendor\` from aranticlabs/bugpin@main ($ahead new commit(s)). Review for conflicts with the fork's local changes (report types, per-type GitHub routing, Keep notification push), then merge."
+          fi
+
+      - name: Arm auto-merge on the sync PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list -R "$GITHUB_REPOSITORY" -B main -H sync/upstream --state open --json number -q '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "no open sync PR — nothing to arm."; exit 0
+          fi
+          # MERGE COMMIT, never squash: main must contain vendor's commits by
+          # ancestry, or the `git rev-list origin/main..origin/vendor` count
+          # above never reaches zero and this job re-opens the same PR forever.
+          # --auto arms native auto-merge (fires when the required `sync-gate`
+          # check passes); if the PR is already green, --auto is rejected, so
+          # fall through to a direct merge (still enforces branch protection).
+          # Neither path can land a red or conflicted PR — those stay open.
+          gh pr merge -R "$GITHUB_REPOSITORY" "$pr" --auto --merge \
+            || gh pr merge -R "$GITHUB_REPOSITORY" "$pr" --merge \
+            || echo "auto-merge not armed — PR left open for manual review."

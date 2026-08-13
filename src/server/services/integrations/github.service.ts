@@ -1,7 +1,14 @@
 import { logger } from '../../utils/logger.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { readFile } from '../../storage/files.js';
-import type { Report, FileRecord } from '@shared/types';
+import type { Report, FileRecord, ReportType } from '@shared/types';
+
+const REPORT_TYPE_HEADINGS: Record<ReportType, string> = {
+  bug: 'Bug Report',
+  feature: 'Feature Request',
+  question: 'Question',
+  task: 'Task',
+};
 
 const MAX_GITHUB_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -332,7 +339,7 @@ async function buildIssueBody(
     ? `${report.reporterName}${report.reporterEmail ? ` (${report.reporterEmail})` : ''}`
     : report.reporterEmail || null;
 
-  let body = `## Bug Report
+  let body = `## ${REPORT_TYPE_HEADINGS[report.reportType] ?? 'Report'}
 
 **URL:** ${metadata.url || 'N/A'}
 ${metadata.title ? `**Page Title:** ${metadata.title}` : ''}
@@ -351,6 +358,7 @@ ${report.description || 'No description provided.'}
 | Timezone | ${metadata.timezone || 'Unknown'} |
 | Page Load Time | ${metadata.pageLoadTime ? metadata.pageLoadTime + 'ms' : 'N/A'} |
 | Timestamp | ${metadata.timestamp || report.createdAt} |
+| Type | ${report.reportType} |
 | Priority | ${report.priority} |
 `;
 

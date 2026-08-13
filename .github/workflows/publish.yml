@@ -1,0 +1,128 @@
+name: publish
+# Builds our BugPin fork and pushes to ghcr.io/cyborgninja21/bugpin-homelab.
+# The package inherits the repo's visibility. Pulled by the homelab
+# `bugpin-freyr-vm-fed-01` Komodo stack, which pins the :sha tag in
+# Homelab-Containers/prod/bugpin/.env-override.
+#
+# WHY `-homelab` AND NOT PLAIN `bugpin`:
+#   The plain `bugpin` package was created in June 2026 by a HAND `docker push`.
+#   A user-scoped GHCR package created outside Actions is not linked to any
+#   repository and grants no repo write access, so this workflow's GITHUB_TOKEN
+#   got `denied: permission_denied: write_package`. Adding
+#   org.opencontainers.image.source linked the package but did NOT grant access
+#   — that needs a separate "Manage Actions access" entry that exists only in
+#   the web UI (no REST endpoint), and deleting the package to start over needs
+#   a `delete:packages` scope we do not have.
+#   A package that Actions creates itself is linked AND granted automatically,
+#   which is why every other homelab fork package works. So: publish under a
+#   name CI owns from birth. The old `bugpin` package is orphaned — its last
+#   tag is the hand-built 51b928cb… — and can be deleted from the UI whenever
+#   convenient. Do NOT "simplify" this back to `bugpin`; it will 403.
+#
+# Matches the house pattern used by the other homelab forks
+# (prox-palantiri/build-*.yml, Utumno-conan-exiles-panel/publish.yml):
+# GHCR login with the built-in GITHUB_TOKEN, buildx, :latest + :sha tags,
+# GitHub Actions layer cache.
+#
+# NOT the same as the inherited upstream `docker-publish.yml`, which pushes to
+# the vendor's Harbor registry and needs an EE_ACCESS_TOKEN we do not have.
+# That workflow only fires on v*.*.* tags, which this fork never cuts.
+#
+# The private `ee` submodule (aranticlabs/bugpin-ee) is deliberately NOT
+# checked out — we have no access, and the Dockerfile stubs it for CE-only
+# builds.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'Changelog/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/cyborgninja21/bugpin-homelab
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        # canvas is an optional native dep that can fail on CI; upstream's own
+        # Dockerfile tolerates it the same way.
+        run: bun install || true
+
+      - name: Typecheck server + admin + widget
+        run: bun run typecheck
+
+  build-and-push:
+    name: build + push image
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          # org.opencontainers.image.source is LOAD-BEARING, not decoration: it
+          # is what links the GHCR package to this repository, and an unlinked
+          # user-scoped package rejects GITHUB_TOKEN pushes with
+          # "denied: permission_denied: write_package". The package was
+          # originally created by a hand push with no label, so the first CI run
+          # failed exactly this way until a labelled push relinked it.
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=BugPin (homelab fork): report types, per-type GitHub routing, Keep notification push
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Pushed"
+            echo ""
+            echo '```'
+            echo "${{ env.IMAGE }}:${{ github.sha }}"
+            echo "${{ env.IMAGE }}:latest"
+            echo '```'
+            echo ""
+            echo "Pin the sha tag in Homelab-Containers \`prod/bugpin/.env-override\` (BUGPIN_IMAGE), then redeploy the stack."
+          } >> "$GITHUB_STEP_SUMMARY"

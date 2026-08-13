@@ -6,8 +6,30 @@ import {
   Integration,
   IntegrationType,
   GitHubIntegrationConfig,
+  GitHubRepoRoute,
   GitHubSyncMode,
+  ReportType,
+  REPORT_TYPES,
 } from '@shared/types';
+
+const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  bug: 'Bug',
+  feature: 'Feature request',
+  question: 'Question',
+  task: 'Task',
+};
+
+// Per-type label inputs (comma-separated) — '' = inherit base labels.
+type TypeLabelText = Record<ReportType, string>;
+const EMPTY_TYPE_LABELS: TypeLabelText = { bug: '', feature: '', question: '', task: '' };
+
+// A repo-routing rule row in the UI (reportType '' = any type, host '' = any host).
+interface RouteRow {
+  host: string;
+  reportType: '' | ReportType;
+  owner: string;
+  repo: string;
+}
 import {
   useCreateIntegration,
   useUpdateIntegration,
@@ -117,6 +139,8 @@ export function IntegrationDialog({
   const [assigneesError, setAssigneesError] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [fileTransferMode, setFileTransferMode] = useState<'link' | 'upload'>('link');
+  const [typeLabelsText, setTypeLabelsText] = useState<TypeLabelText>(EMPTY_TYPE_LABELS);
+  const [routes, setRoutes] = useState<RouteRow[]>([]);
   const [syncMode, setSyncMode] = useState<GitHubSyncMode>('manual');
   const [showSyncDialog, setShowSyncDialog] = useState(false);
   const [pendingUnsyncedCount, setPendingUnsyncedCount] = useState(0);
@@ -141,6 +165,19 @@ export function IntegrationDialog({
         setEnableLabels(hasLabels);
         setEnableAssignees(hasAssignees);
         setFileTransferMode(config.fileTransferMode || 'link');
+        const tl: TypeLabelText = { ...EMPTY_TYPE_LABELS };
+        for (const rt of REPORT_TYPES) {
+          tl[rt] = (config.typeLabels?.[rt] || []).join(', ');
+        }
+        setTypeLabelsText(tl);
+        setRoutes(
+          (config.repoRoutes || []).map((r) => ({
+            host: r.host || '',
+            reportType: r.reportType || '',
+            owner: r.owner || '',
+            repo: r.repo || '',
+          }))
+        );
         setSyncMode(config.syncMode || 'manual');
 
         // Auto-fetch labels and assignees for editing when toggles are enabled
@@ -179,6 +216,8 @@ export function IntegrationDialog({
         setEnableLabels(false);
         setEnableAssignees(false);
         setFileTransferMode('link');
+        setTypeLabelsText(EMPTY_TYPE_LABELS);
+        setRoutes([]);
         setSyncMode('manual');
       }
       setRepositories([]);
@@ -340,6 +379,25 @@ export function IntegrationDialog({
   };
 
   const onSubmit = async (data: FormData) => {
+    // Per-type labels (comma-separated) — applied regardless of repo routing.
+    const typeLabels: Partial<Record<ReportType, string[]>> = {};
+    for (const rt of REPORT_TYPES) {
+      const labels = typeLabelsText[rt]
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (labels.length > 0) typeLabels[rt] = labels;
+    }
+    // Repo-routing rules (drop incomplete rows; omit blank host/type = "any").
+    const repoRoutes: GitHubRepoRoute[] = routes
+      .filter((r) => r.owner.trim() && r.repo.trim())
+      .map((r) => {
+        const route: GitHubRepoRoute = { owner: r.owner.trim(), repo: r.repo.trim() };
+        if (r.host.trim()) route.host = r.host.trim();
+        if (r.reportType) route.reportType = r.reportType;
+        return route;
+      });
+
     const config: GitHubIntegrationConfig = {
       owner: data.owner.trim(),
       repo: data.repo.trim(),
@@ -348,6 +406,8 @@ export function IntegrationDialog({
       labels: selectedLabels.length > 0 ? selectedLabels : undefined,
       assignees: selectedAssignees.length > 0 ? selectedAssignees : undefined,
       fileTransferMode,
+      typeLabels: Object.keys(typeLabels).length > 0 ? typeLabels : undefined,
+      repoRoutes: repoRoutes.length > 0 ? repoRoutes : undefined,
     };
 
     try {
@@ -717,6 +777,113 @@ export function IntegrationDialog({
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Per-type labels (optional) */}
+              <div className="space-y-3 border rounded-lg p-3">
+                <div className="space-y-1">
+                  <Label>Per-type labels (optional)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Comma-separated labels applied to issues of each type (e.g. feature →
+                    enhancement). Blank inherits the base labels above.
+                  </p>
+                </div>
+                {REPORT_TYPES.map((rt) => (
+                  <div key={rt} className="grid grid-cols-[110px_1fr] items-center gap-2">
+                    <Label className="text-xs font-medium">{REPORT_TYPE_LABELS[rt]}</Label>
+                    <Input
+                      placeholder="inherit base labels"
+                      value={typeLabelsText[rt]}
+                      onChange={(e) => setTypeLabelsText((p) => ({ ...p, [rt]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Repo routing rules (optional) */}
+              <div className="space-y-3 border rounded-lg p-3">
+                <div className="space-y-1">
+                  <Label>Repo routing rules (optional)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Route reports to other repos by app (URL host — exact or wildcard like
+                    <code> *.epikos-kyklos.com</code>) and/or type. Most-specific rule wins; no
+                    match uses the base repo above. Leave host or type blank for &quot;any&quot;.
+                  </p>
+                </div>
+                {routes.map((r, i) => (
+                  <div
+                    key={i}
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_130px_1fr_1fr_auto] gap-2 items-center"
+                  >
+                    <Input
+                      placeholder="host (e.g. *.epikos-kyklos.com)"
+                      value={r.host}
+                      onChange={(e) =>
+                        setRoutes((rs) =>
+                          rs.map((x, j) => (j === i ? { ...x, host: e.target.value } : x))
+                        )
+                      }
+                    />
+                    <Select
+                      value={r.reportType || 'any'}
+                      onValueChange={(v) =>
+                        setRoutes((rs) =>
+                          rs.map((x, j) =>
+                            j === i ? { ...x, reportType: v === 'any' ? '' : (v as ReportType) } : x
+                          )
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Any type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any type</SelectItem>
+                        {REPORT_TYPES.map((rt) => (
+                          <SelectItem key={rt} value={rt}>
+                            {REPORT_TYPE_LABELS[rt]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="repo owner"
+                      value={r.owner}
+                      onChange={(e) =>
+                        setRoutes((rs) =>
+                          rs.map((x, j) => (j === i ? { ...x, owner: e.target.value } : x))
+                        )
+                      }
+                    />
+                    <Input
+                      placeholder="repo name"
+                      value={r.repo}
+                      onChange={(e) =>
+                        setRoutes((rs) =>
+                          rs.map((x, j) => (j === i ? { ...x, repo: e.target.value } : x))
+                        )
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRoutes((rs) => rs.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setRoutes((rs) => [...rs, { host: '', reportType: '', owner: '', repo: '' }])
+                  }
+                >
+                  Add rule
+                </Button>
               </div>
 
               {/* File Transfer Mode Toggle */}

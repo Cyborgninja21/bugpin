@@ -3,7 +3,7 @@ import { reportsService } from '../../services/reports.service.js';
 import { syncQueueService } from '../../services/integrations/sync-queue.service.js';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
 import { validate, schemas } from '../../middleware/validate.js';
-import type { ReportStatus, ReportPriority } from '@shared/types';
+import type { ReportStatus, ReportPriority, ReportType } from '@shared/types';
 
 const reports = new Hono();
 
@@ -18,6 +18,7 @@ reports.get('/', validate({ query: schemas.reportFilter }), async (c) => {
   const filter = {
     projectId: query.projectId,
     source: query.source as 'widget' | 'manual' | undefined,
+    reportType: query.reportType?.split(',') as ReportType[],
     status: query.status?.split(',') as ReportStatus[],
     priority: query.priority?.split(',') as ReportPriority[],
     assignedTo: query.assignedTo,

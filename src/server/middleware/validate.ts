@@ -137,6 +137,14 @@ const projectFieldsSchema = z
   })
   .strict();
 
+const reportTypeEnum = z.enum(['bug', 'feature', 'question', 'task']);
+const projectReportTypesSchema = z
+  .object({
+    enabled: z.array(reportTypeEnum).optional(),
+    default: reportTypeEnum.optional(),
+  })
+  .strict();
+
 const projectReporterNotificationsSchema = z
   .object({
     emailEnabled: z.boolean().optional(),
@@ -167,6 +175,7 @@ const projectSettingsSchema = z
     security: projectSecuritySchema.optional(),
     branding: projectBrandingSchema.optional(),
     fields: projectFieldsSchema.optional(),
+    reportTypes: projectReportTypesSchema.optional(),
     notifyReporter: z.boolean().optional(),
     reporterNotifications: projectReporterNotificationsSchema.optional(),
     widget: projectLegacyWidgetSchema.optional(),
@@ -312,6 +321,7 @@ export const schemas = {
   reportFilter: z.object({
     projectId: z.string().optional(),
     source: z.enum(['widget', 'manual']).optional(),
+    reportType: z.string().optional(), // comma-separated list
     status: z.string().optional(), // comma-separated list
     priority: z.string().optional(), // comma-separated list
     assignedTo: z.string().optional(),

@@ -1,6 +1,7 @@
 import { PageContext } from '../capture/context.js';
 import { dataUrlToBlob, getExtensionFromDataUrl } from '../capture/screenshot.js';
 import { bufferReport, startAutoSync } from '../storage/report-buffer.js';
+import type { ReportType } from '@shared/types';
 
 // Start auto-sync on module load
 startAutoSync();
@@ -14,6 +15,7 @@ export interface MediaItem {
 export interface SubmitReportInput {
   apiKey: string;
   serverUrl: string;
+  reportType?: ReportType;
   title: string;
   description?: string;
   priority: 'lowest' | 'low' | 'medium' | 'high' | 'highest';
@@ -68,6 +70,7 @@ export async function submitReport(input: SubmitReportInput): Promise<SubmitResp
     await bufferReport({
       apiKey,
       serverUrl,
+      reportType: data.reportType,
       title: data.title,
       description: data.description,
       priority: data.priority,
@@ -94,6 +97,7 @@ export async function submitReport(input: SubmitReportInput): Promise<SubmitResp
   formData.append(
     'data',
     JSON.stringify({
+      reportType: data.reportType,
       title: data.title,
       description: data.description,
       priority: data.priority,

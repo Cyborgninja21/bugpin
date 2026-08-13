@@ -26,6 +26,7 @@ function makeReport(overrides: Partial<Report> = {}): Report {
     id: 'abc123',
     projectId: 'p1',
     source: 'widget',
+    reportType: 'bug',
     title: 'Submit button does nothing',
     description: 'Clicking submit on checkout page is unresponsive.',
     status: 'open',

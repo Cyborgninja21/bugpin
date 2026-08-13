@@ -240,7 +240,13 @@ export const projectsService = {
   /**
    * Validate widget access (checks API key, project active status, and origin whitelist)
    */
-  async validateWidgetAccess(apiKey: string, origin?: string): Promise<Result<Project>> {
+  async validateWidgetAccess(
+    apiKey: string,
+    origin?: string,
+    // Write paths pass true so a missing Origin cannot bypass a configured
+    // domain whitelist. Read paths (widget config) leave it false.
+    requireOrigin = false
+  ): Promise<Result<Project>> {
     const project = await projectsRepo.findByApiKey(apiKey);
 
     if (!project) {
@@ -253,7 +259,26 @@ export const projectsService = {
 
     // Check origin if domain whitelist is configured
     const allowedOrigins = project.settings?.security?.allowedOrigins;
-    if (allowedOrigins && allowedOrigins.length > 0 && origin) {
+    if (allowedOrigins && allowedOrigins.length > 0) {
+      // A MISSING Origin must not skip the whitelist on WRITE paths. Upstream
+      // gated this whole block on `&& origin`, so once a domain whitelist was
+      // configured any caller that simply omitted the header walked straight
+      // past it — trivial for a script, impossible for the browsers the
+      // whitelist is meant to constrain (they always send Origin on a
+      // cross-origin POST). Fail closed where it matters.
+      //
+      // Only where it matters, though: /api/widget/config is fetched before the
+      // widget can do anything, and callers of it legitimately have no origin.
+      // Failing closed there would take the widget down on every page rather
+      // than block an abuser, so read paths stay lenient — the config response
+      // is public branding, not a secret.
+      if (!origin) {
+        if (requireOrigin) {
+          return Result.fail('Origin required', 'ORIGIN_REQUIRED');
+        }
+        return Result.ok(project);
+      }
+
       let originDomain: string;
       try {
         originDomain = new URL(origin).hostname;

@@ -42,6 +42,7 @@ describe('draft storage', () => {
     const { draftStorage } = await import('../../storage/draft-storage.js');
 
     const formData = {
+      reportType: 'bug' as const,
       title: 'Test Bug',
       description: 'This is a test bug description',
       priority: 'high' as const,
@@ -140,6 +141,7 @@ describe('draft storage', () => {
     const { draftStorage } = await import('../../storage/draft-storage.js');
 
     const formData1 = {
+      reportType: 'bug' as const,
       title: 'Bug for Project 1',
       description: '',
       priority: 'low' as const,
@@ -148,6 +150,7 @@ describe('draft storage', () => {
     };
 
     const formData2 = {
+      reportType: 'bug' as const,
       title: 'Bug for Project 2',
       description: '',
       priority: 'high' as const,

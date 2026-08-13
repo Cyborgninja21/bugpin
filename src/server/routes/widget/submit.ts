@@ -3,13 +3,13 @@ import { z } from 'zod';
 import { reportsService } from '../../services/reports.service.js';
 import { projectsService } from '../../services/projects.service.js';
 import { settingsService } from '../../services/settings.service.js';
-import { dynamicRateLimiter, apiKeyGenerator } from '../../middleware/rate-limit.js';
+import { dynamicRateLimiter, apiKeyAndClientGenerator } from '../../middleware/rate-limit.js';
 import { logger } from '../../utils/logger.js';
 import { ALLOWED_MEDIA_MIME_TYPES } from '../../storage/files.js';
 import { settingsCacheService } from '../../services/settings-cache.service.js';
 import { resolveSubmitLocale } from '../../utils/locale.js';
 import { tooltipLauncherDefaults } from '../../i18n/tooltip-defaults.js';
-import type { LauncherTextBundle, ReportMetadata } from '@shared/types';
+import type { LauncherTextBundle, ReportMetadata, ReportType } from '@shared/types';
 
 const widget = new Hono();
 
@@ -23,6 +23,7 @@ function sanitizeForDisplay(value: string): string {
 // Validation Schemas
 
 const submitReportSchema = z.object({
+  reportType: z.enum(['bug', 'feature', 'question', 'task']).default('bug'),
   title: z.string().min(4, 'Title must be at least 4 characters').max(200),
   description: z.string().optional(),
   priority: z.enum(['lowest', 'low', 'medium', 'high', 'highest']).default('medium'),
@@ -98,7 +99,10 @@ const submitReportSchema = z.object({
 
 // Submit Report
 
-widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), async (c) => {
+// Bucket per (project key + client), not per key alone: the widget key is public
+// and injected fleet-wide, so keying on it alone gives every visitor a single
+// shared 10/min budget. See apiKeyAndClientGenerator.
+widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyAndClientGenerator }), async (c) => {
   // Reject deprecated query parameter - API key must be in header
   if (c.req.query('apiKey')) {
     return c.json(
@@ -123,7 +127,8 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
 
   // Validate API key, project active status, and origin
   const origin = c.req.header('origin');
-  const projectResult = await projectsService.validateWidgetAccess(apiKey, origin);
+  // Write path: enforce the domain whitelist strictly (a missing Origin is rejected).
+  const projectResult = await projectsService.validateWidgetAccess(apiKey, origin, true);
 
   if (!projectResult.success) {
     const statusCode =
@@ -293,9 +298,26 @@ widget.post('/submit', dynamicRateLimiter({ keyGenerator: apiKeyGenerator }), as
     projectDefault: effectiveLanguage?.defaultLanguage,
   });
 
+  // Validate the report type against the project's enabled types. An unset
+  // config means only the default 'bug' type is accepted.
+  const enabledTypes: ReportType[] = projectResult.value.settings?.reportTypes?.enabled?.length
+    ? projectResult.value.settings.reportTypes.enabled
+    : ['bug'];
+  if (!enabledTypes.includes(data.reportType)) {
+    return c.json(
+      {
+        success: false,
+        error: 'INVALID_REPORT_TYPE',
+        message: `Report type "${sanitizeForDisplay(data.reportType)}" is not enabled for this project.`,
+      },
+      400
+    );
+  }
+
   // Create report via service
   const result = await reportsService.create({
     apiKey,
+    reportType: data.reportType,
     title: data.title,
     description: data.description,
     priority: data.priority,
@@ -496,6 +518,15 @@ widget.get('/config/:apiKey', async (c) => {
       language: {
         mode: projLanguage.mode,
         defaultLanguage: projLanguage.defaultLanguage,
+      },
+      reportTypes: {
+        enabled: project.settings?.reportTypes?.enabled?.length
+          ? project.settings.reportTypes.enabled
+          : (['bug'] as ReportType[]),
+        default:
+          project.settings?.reportTypes?.default ??
+          project.settings?.reportTypes?.enabled?.[0] ??
+          ('bug' as ReportType),
       },
     },
   });

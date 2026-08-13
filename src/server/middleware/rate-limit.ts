@@ -138,6 +138,28 @@ export function apiKeyGenerator(c: Context): string {
 }
 
 /**
+ * Per-client key generator for widget endpoints: API key AND caller identity.
+ *
+ * WHY THIS EXISTS (homelab fork): `apiKeyGenerator` buckets purely on the
+ * project API key. That is fine when each site has its own key, but a widget
+ * key is PUBLIC by design — it ships in the script tag on every page — and a
+ * deployment that injects ONE key fleet-wide therefore collapses every visitor
+ * into a single bucket. With the default 10/min that means ten submissions per
+ * minute for ALL users of ALL sites combined: one person filing a few reports
+ * (or a trivial script) locks everybody else out, and it looks like the intake
+ * is broken rather than rate-limited.
+ *
+ * Combining the key with the caller keeps the per-project scope while giving
+ * each client its own budget. `defaultKeyGenerator` already prefers
+ * X-Forwarded-For / X-Real-IP, which the edge proxy sets.
+ */
+export function apiKeyAndClientGenerator(c: Context): string {
+  const apiKey = c.req.header('x-api-key') || c.req.query('apiKey');
+  const client = defaultKeyGenerator(c);
+  return apiKey ? `apikey:${apiKey}|${client}` : client;
+}
+
+/**
  * Dynamic rate limiter that fetches limit from database settings
  * Uses rateLimitPerMinute setting with 60 second window
  */

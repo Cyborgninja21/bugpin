@@ -63,6 +63,7 @@ const baseConfig: WidgetConfig = {
   maxScreenshotSize: 5 * 1024 * 1024,
   maxImageUploadSize: 10 * 1024 * 1024,
   maxVideoUploadSize: 50 * 1024 * 1024,
+  reportTypes: { enabled: ['bug'], default: 'bug' },
 };
 
 const mediaItem: CapturedMedia = {
@@ -211,9 +212,11 @@ describe('widget components', () => {
         isSubmitting={false}
         isCapturing={false}
         enableAnnotation={true}
+        enabledReportTypes={['bug']}
         activeTab="details"
         onActiveTabChange={() => undefined}
         formData={{
+          reportType: 'bug',
           title: '',
           description: '',
           priority: 'medium',
@@ -250,9 +253,11 @@ describe('widget components', () => {
         isSubmitting={false}
         isCapturing={false}
         enableAnnotation={true}
+        enabledReportTypes={['bug']}
         activeTab="media"
         onActiveTabChange={() => undefined}
         formData={{
+          reportType: 'bug',
           title: '',
           description: '',
           priority: 'medium',
@@ -286,9 +291,11 @@ describe('widget components', () => {
         isSubmitting={true}
         isCapturing={false}
         enableAnnotation={true}
+        enabledReportTypes={['bug']}
         activeTab="details"
         onActiveTabChange={() => undefined}
         formData={{
+          reportType: 'bug',
           title: 'Valid title',
           description: '',
           priority: 'medium',

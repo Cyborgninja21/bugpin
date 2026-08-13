@@ -1,0 +1,73 @@
+name: sync-gate
+# The ONLY required status check on `main` (branch protection). It aggregates
+# "everything that ran on this PR head is green" so native auto-merge can be
+# gated without naming any real check by its literal context:
+#   * Upstream matrix legs are named by things that churn (distro release,
+#     language version, platform). A literal required context that stops
+#     reporting never fails, it blocks forever — main would deadlock for EVERY
+#     PR on the next upstream rename.
+#   * Sibling workflows are usually paths:-filtered, so a doc- or workflow-only
+#     PR triggers no checks at all — same forever-block if their contexts were
+#     required.
+# This gate has no paths filter, always reports, and never names a sibling.
+#
+# Verdict: success when every sibling check-run on the head SHA concluded
+# success/neutral/skipped, or when none were triggered at all; failure when
+# any sibling failed or was cancelled. The 45-minute timeout fails closed —
+# a wedged sibling leaves the PR unmerged for a human, never auto-merges.
+#
+# Companion pieces (see upstream-sync.yml, which arms auto-merge on sync PRs):
+#   repo setting  allow_auto_merge=true
+#   branch protection on main: required_status_checks = ["sync-gate"], strict=false
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  checks: read
+  contents: read
+
+concurrency:
+  group: sync-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Aggregate sibling check results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Grace window: workflows that WILL run on this event enqueue their
+          # check runs within seconds; if nothing has appeared after this
+          # long, nothing is coming (paths filters excluded everything).
+          grace_until=$(( $(date +%s) + 180 ))
+          while true; do
+            runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+                     --jq '[.check_runs[] | select(.name != "sync-gate")]')
+            total=$(jq length <<<"$runs")
+            if [ "$total" -eq 0 ]; then
+              if [ "$(date +%s)" -lt "$grace_until" ]; then sleep 20; continue; fi
+              echo "no sibling checks were triggered — nothing to gate"
+              exit 0
+            fi
+            pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
+            if [ "$pending" -gt 0 ]; then
+              jq -r '.[] | select(.status != "completed") | "waiting on: \(.name) [\(.status)]"' <<<"$runs"
+              sleep 30; continue
+            fi
+            failed=$(jq -r '.[] | select(.conclusion | IN("success","neutral","skipped") | not) | "\(.name) [\(.conclusion)]"' <<<"$runs")
+            if [ -n "$failed" ]; then
+              echo "failed sibling checks:"
+              echo "$failed"
+              exit 1
+            fi
+            jq -r '.[] | "ok: \(.name) [\(.conclusion)]"' <<<"$runs"
+            exit 0
+          done

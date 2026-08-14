@@ -39,6 +39,18 @@ on:
       - 'docs/**'
       - 'Changelog/**'
       - '**/*.md'
+  # Also on PRs, so `sync-gate` has a REAL check to aggregate before it lets an
+  # upstream sync auto-merge. Without this the only check on a sync PR was
+  # sync-gate itself, which passes when no siblings ran — so the 26-commit sync
+  # in #7 auto-merged green and broke `bun run typecheck` on main, invisibly,
+  # until the next publish. Only the typecheck job runs for PRs; the image push
+  # stays main-only (see the `if` on build-and-push).
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'Changelog/**'
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
@@ -75,6 +87,8 @@ jobs:
   build-and-push:
     name: build + push image
     needs: typecheck
+    # PRs typecheck only — never publish an image from an unmerged branch.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

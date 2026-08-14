@@ -11,7 +11,14 @@ export default defineConfig({
     dts({
       include: ['**/*.ts', '**/*.tsx', '../shared/**/*.ts'],
       exclude: ['tests/**', 'node_modules/**', 'dist/**', 'vite.config.ts'],
-      rollupTypes: true,
+      // Fork fix: upstream bumped vite-plugin-dts to ^5.0.0 in this sync but
+      // left the v4 option name. v5 renamed `rollupTypes` -> `bundleTypes`
+      // (boolean shorthand still supported) — see the maintainer's
+      // docs/en/migration-v4-to-v5.md. Upstream never typechecks the widget, so
+      // their CI cannot see this; ours can, which is why it broke us and not
+      // them. Expect this line to conflict on a future sync if upstream fixes
+      // it their own way.
+      bundleTypes: true,
       tsconfigPath: './tsconfig.json',
       compilerOptions: {
         rootDir: path.resolve(__dirname, '..'),

@@ -26,6 +26,10 @@ function makeReport(overrides: Partial<Report> = {}): Report {
     id: 'rpt_1',
     projectId: 'prj_1',
     source: 'manual',
+    // Fork: Report.reportType is REQUIRED here (it drives per-type GitHub
+    // routing), so upstream fixtures have to set it — same as the sibling
+    // makeReport() in report-export.test.ts.
+    reportType: 'bug',
     title: 'Checkout broken',
     description: 'Button does not respond',
     status: 'open',

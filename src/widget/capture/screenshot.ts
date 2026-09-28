@@ -16,6 +16,7 @@ export interface CaptureOptions {
 }
 
 // Guardrails to prevent crashes
+const IMAGE_WAIT_TIMEOUT_MS = 3000;
 const MAX_PIXEL_RATIO = 2;
 const MAX_CANVAS_DIMENSION = 16384;
 const MAX_TOTAL_PIXELS = 40_000_000;
@@ -41,36 +42,32 @@ async function waitForImages(element: HTMLElement): Promise<void> {
   const promises: Promise<void>[] = [];
 
   images.forEach((img) => {
-    if (!img.complete) {
-      // Image not yet loaded - wait for load then decode
-      promises.push(
-        new Promise<void>((resolve) => {
-          const onLoad = async () => {
-            img.removeEventListener('load', onLoad);
-            img.removeEventListener('error', onError);
-            // Decode after load for proper rendering
-            if (img.decode) {
-              try {
-                await img.decode();
-              } catch {
-                // Ignore decode errors
-              }
-            }
-            resolve();
-          };
-          const onError = () => {
-            img.removeEventListener('load', onLoad);
-            img.removeEventListener('error', onError);
-            resolve(); // Don't block on failed images
-          };
+    promises.push(
+      new Promise<void>((resolve) => {
+        const finish = () => {
+          clearTimeout(timer);
+          img.removeEventListener('load', onLoad);
+          img.removeEventListener('error', finish);
+          resolve();
+        };
+        const onLoad = async () => {
+          try {
+            await img.decode?.();
+          } catch {
+            // Failed images must not block capture.
+          } finally {
+            finish();
+          }
+        };
+        const timer = setTimeout(finish, IMAGE_WAIT_TIMEOUT_MS);
+        if (img.complete) {
+          void onLoad();
+        } else {
           img.addEventListener('load', onLoad, { once: true });
-          img.addEventListener('error', onError, { once: true });
-        })
-      );
-    } else if (img.decode) {
-      // Image already loaded - just decode
-      promises.push(img.decode().catch(() => {}));
-    }
+          img.addEventListener('error', finish, { once: true });
+        }
+      })
+    );
   });
 
   if (promises.length > 0) {

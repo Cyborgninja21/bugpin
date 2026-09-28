@@ -33,6 +33,8 @@ const ja: WidgetCatalog = {
   'dialog.buttons.submit': 'レポートを送信',
 
   'dialog.branding.poweredBy': 'Powered by',
+  'dialog.branding.reports': 'レポート一覧',
+  'dialog.branding.app': 'BugPin を開く',
 
   'validation.title.required': 'タイトルは必須です',
   'validation.title.minLength': 'タイトルは4文字以上で入力してください',

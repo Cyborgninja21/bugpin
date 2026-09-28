@@ -33,6 +33,8 @@ const zh: WidgetCatalog = {
   'dialog.buttons.submit': '提交缺陷报告',
 
   'dialog.branding.poweredBy': 'Powered by',
+  'dialog.branding.reports': '报告列表',
+  'dialog.branding.app': '打开 BugPin',
 
   'validation.title.required': '请填写标题',
   'validation.title.minLength': '标题至少需要 4 个字符',

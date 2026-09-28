@@ -33,6 +33,8 @@ const it: WidgetCatalog = {
   'dialog.buttons.submit': 'Invia segnalazione',
 
   'dialog.branding.poweredBy': 'Powered by',
+  'dialog.branding.reports': 'Segnalazioni',
+  'dialog.branding.app': 'Apri BugPin',
 
   'validation.title.required': 'Il titolo è obbligatorio',
   'validation.title.minLength': 'Il titolo deve contenere almeno 4 caratteri',

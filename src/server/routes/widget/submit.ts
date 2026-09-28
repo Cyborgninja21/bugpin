@@ -530,6 +530,8 @@ widget.get('/config/:apiKey', async (c) => {
       },
       // Target of the launcher's "What's new" button; `{tld}` is filled in by the widget
       newsUrl: process.env.WIDGET_NEWS_URL || null,
+      // Where submitted reports end up (e.g. the GitHub issues list), linked in the dialog footer
+      reportsUrl: process.env.WIDGET_REPORTS_URL || null,
     },
   });
 });

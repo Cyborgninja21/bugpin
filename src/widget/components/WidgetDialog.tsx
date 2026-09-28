@@ -53,6 +53,10 @@ interface WidgetDialogProps {
   onReduceScreenshotQualityChange: (value: boolean) => void;
   oversizedCapture: { sizeMb: number; limitMb: number } | null;
   onDismissOversizedCapture: () => void;
+  /** Where submitted reports end up; hidden when null */
+  reportsUrl?: string | null;
+  /** BugPin server the widget talks to, linked in the footer */
+  appUrl?: string | null;
 }
 
 const TAB_ICONS = {
@@ -85,6 +89,8 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
   onReduceScreenshotQualityChange,
   oversizedCapture,
   onDismissOversizedCapture,
+  reportsUrl = null,
+  appUrl = null,
 }) => {
   useLocale();
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -333,6 +339,32 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
           >
             BugPin
           </a>
+          {reportsUrl && (
+            <>
+              {' · '}
+              <a
+                href={reportsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-primary no-underline font-medium hover:underline hover:text-primary-hover"
+              >
+                {t('dialog.branding.reports')}
+              </a>
+            </>
+          )}
+          {appUrl && (
+            <>
+              {' · '}
+              <a
+                href={appUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-primary no-underline font-medium hover:underline hover:text-primary-hover"
+              >
+                {t('dialog.branding.app')}
+              </a>
+            </>
+          )}
         </div>
       </div>
     </div>

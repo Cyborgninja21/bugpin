@@ -69,6 +69,8 @@ export interface WidgetConfig {
    * the LAN and the public domain.
    */
   newsUrl?: string | null;
+  /** Where submitted reports end up, linked in the dialog footer; hidden when null */
+  reportsUrl?: string | null;
 }
 
 export const defaultConfig: WidgetConfig = {

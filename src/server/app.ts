@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { httpsEnforcement } from './middleware/https-enforcement.js';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
+import { serveWidgetScript } from './widget-script.js';
 
 // Extend Hono context with request ID
 declare module 'hono' {
@@ -253,17 +254,8 @@ export function createApp(): Hono {
     const filePath = `${config.widgetDir}/widget.js`;
 
     try {
-      const file = Bun.file(filePath);
-      if (await file.exists()) {
-        return new Response(file, {
-          headers: {
-            'Content-Type': 'application/javascript',
-            'Cache-Control': 'public, max-age=3600', // 1 hour
-            'Access-Control-Allow-Origin': '*', // Allow widget to be loaded from any domain
-            'Cross-Origin-Resource-Policy': 'cross-origin',
-          },
-        });
-      }
+      const response = await serveWidgetScript(filePath, c.req.raw);
+      if (response) return response;
     } catch {
       // File not found
     }

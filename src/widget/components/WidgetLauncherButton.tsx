@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { Icon } from './Icon.js';
 import { cn } from '../lib/utils';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
+import { useDraggableLauncher } from '../hooks/use-draggable-launcher.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 import { resolveLauncherText } from '../i18n/resolve-launcher-text.js';
@@ -67,6 +68,9 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
   });
   const tooltipRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const draggable = useDraggableLauncher(wrapperRef, onClick);
+  const tooltipBelow = draggable.style ? draggable.isNearTop : position.startsWith('top');
   const effectiveTheme = useEffectiveTheme(theme);
   const isDarkMode = effectiveTheme === 'dark';
   const activeLocale = getLocale();
@@ -152,23 +156,32 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
   const padding = buttonShape === 'round' ? `${buttonIconSize / 2}px` : '12px 20px';
 
   return (
-    <div class={cn('fixed z-[2147483647]', positionClasses[position])}>
+    <div
+      ref={wrapperRef}
+      class={cn('fixed z-[2147483647]', !draggable.style && positionClasses[position])}
+      style={draggable.style ?? undefined}
+    >
       <button
         ref={buttonRef}
         class={cn(
-          'relative flex items-center justify-center gap-2 border-none text-sm font-medium cursor-pointer shadow-lg transition-all duration-200',
-          enableHoverScaleEffect && 'hover:scale-110 hover:shadow-xl active:scale-105'
+          'relative flex items-center justify-center gap-2 border-none text-sm font-medium shadow-lg transition-all duration-200',
+          draggable.isDragging ? 'cursor-grabbing' : 'cursor-pointer',
+          enableHoverScaleEffect &&
+            !draggable.isDragging &&
+            'hover:scale-110 hover:shadow-xl active:scale-105'
         )}
         style={{
           backgroundColor: buttonColor,
           color: textColor,
           borderRadius: borderRadius,
           padding: padding,
+          touchAction: 'none',
         }}
-        onClick={onClick}
+        {...draggable.handlers}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         aria-label={ariaLabel}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight Alt+Home"
       >
         {buttonIcon && (
           <Icon name={buttonIcon} size={buttonIconSize} strokeWidth={buttonIconStroke} />
@@ -176,10 +189,13 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         {resolvedButtonText && <span>{resolvedButtonText}</span>}
       </button>
 
-      {tooltipEnabled && resolvedTooltipText && isHovered && (
+      {tooltipEnabled && resolvedTooltipText && isHovered && !draggable.isDragging && (
         <div
           ref={tooltipRef}
-          class="absolute bottom-full mb-2 px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md"
+          class={cn(
+            'absolute px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md',
+            tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
+          )}
           style={{
             backgroundColor: tooltipBgColor,
             color: tooltipTextColor,
@@ -190,13 +206,25 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         >
           {resolvedTooltipText}
           <div
-            class="absolute top-full border-4 border-solid border-transparent"
-            style={{
-              left: tooltipOffset.arrowLeft,
-              transform: 'translateX(-50%)',
-              marginTop: '-4px',
-              borderTopColor: tooltipBgColor,
-            }}
+            class={cn(
+              'absolute border-4 border-solid border-transparent',
+              tooltipBelow ? 'bottom-full' : 'top-full'
+            )}
+            style={
+              tooltipBelow
+                ? {
+                    left: tooltipOffset.arrowLeft,
+                    transform: 'translateX(-50%)',
+                    marginBottom: '-4px',
+                    borderBottomColor: tooltipBgColor,
+                  }
+                : {
+                    left: tooltipOffset.arrowLeft,
+                    transform: 'translateX(-50%)',
+                    marginTop: '-4px',
+                    borderTopColor: tooltipBgColor,
+                  }
+            }
           />
         </div>
       )}

@@ -47,7 +47,10 @@ function harness(
     if (String(input).includes('/contents/')) {
       fileGets++;
       if (options.fileStatus) return new Response('', { status: options.fileStatus });
-      return Response.json({ type: 'file', html_url: html });
+      return Response.json({
+        type: 'file',
+        html_url: `https://github.com/org/repo/blob/develop/${String(input).split('/contents/')[1]}`,
+      });
     }
     if (init?.method === 'PATCH') {
       expect(backups).toHaveLength(1);
@@ -100,7 +103,7 @@ describe('GitHub link repair', () => {
     const h = harness();
     const original = h.body();
     expect(await h.run(true)).toMatchObject({ value: { updated: 1, failed: 0 } });
-    const expected = `Manual introduction\n\n[Screenshot](${html})\n[Download](${html})\n\nManual footer`;
+    const expected = `Manual introduction\n\n![Screenshot](${html}?raw=1)\n![Download](${html}?raw=1)\n\nManual footer`;
     expect(h.patches).toEqual([{ body: expected }]);
     expect(h.backups[0]).toMatchObject({ originalBody: original, replacementBody: expected });
     expect(await h.run(true)).toMatchObject({ value: { skipped: 1, updated: 0 } });
@@ -108,11 +111,41 @@ describe('GitHub link repair', () => {
   });
 
   it('preserves unrelated links and examples', async () => {
-    const body = `[Other report](${raw.replace('rpt_1', 'rpt_2')})\n[Other repo](${raw.replace('/org/repo/', '/other/repo/')})\n\`![Example](${raw})\`\n\`\`\`md\n![Example](${raw})\n\`\`\`\n[Already fixed](${html})`;
+    const body = `[Other report](${raw.replace('rpt_1', 'rpt_2')})\n[Other repo](${raw.replace('/org/repo/', '/other/repo/')})\n\`![Example](${raw})\`\n\`\`\`md\n![Example](${raw})\n\`\`\`\n![Already fixed](${html}?raw=1)`;
     const h = harness({ body });
     expect(await h.run(true)).toMatchObject({ value: { skipped: 1 } });
     expect(h.body()).toBe(body);
     expect(h.fileGets()).toBe(0);
+  });
+
+  it('restores images repaired into plain links and leaves document attachments as links', async () => {
+    const pdfRaw = raw.replace('screenshot.png', 'document.pdf');
+    const pdfHtml = html.replace('screenshot.png', 'document.pdf');
+    const body = `[Screenshot](${html})\n[Document](${pdfHtml})\n[Old document](${pdfRaw})`;
+    const h = harness({ body });
+    expect(await h.run(true)).toMatchObject({ value: { updated: 1, failed: 0 } });
+    expect(h.body()).toBe(
+      `![Screenshot](${html}?raw=1)\n[Document](${pdfHtml})\n[Old document](${pdfHtml})`
+    );
+    expect(await h.run(true)).toMatchObject({ value: { updated: 0, skipped: 1 } });
+    expect(h.patches).toHaveLength(1);
+  });
+
+  it('preserves blob refs and query parameters without duplicating the raw parameter', async () => {
+    const source = html.replace('/develop/', '/feature/capture/').replace('.png', '.PNG');
+    const h = harness({ body: `![Screenshot](${source}?raw=true&other=value)` });
+    expect(await h.run(true)).toMatchObject({ value: { updated: 1 } });
+    expect(h.body()).toBe(`![Screenshot](${source}?raw=1&other=value)`);
+    expect(h.fileGets()).toBe(0);
+    expect(await h.run(true)).toMatchObject({ value: { skipped: 1 } });
+  });
+
+  it('does not modify blob links belonging to other reports or repositories', async () => {
+    const body = `[Other report](${html.replace('rpt_1', 'rpt_2')})\n[Other repo](${html.replace('/org/repo/', '/other/repo/')})`;
+    const h = harness({ body });
+    expect(await h.run(true)).toMatchObject({ value: { skipped: 1 } });
+    expect(h.body()).toBe(body);
+    expect(h.patches).toHaveLength(0);
   });
 
   it('skips closed issues and mismatched repositories', async () => {

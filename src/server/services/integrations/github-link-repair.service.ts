@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { githubFileMarkdown } from './github-markdown.js';
 import { Result } from '../../utils/result.js';
 import type { GitHubRepairRow } from '../../database/repositories/github-link-repair.repo.js';
 
@@ -105,7 +106,7 @@ export async function repairGitHubLinks(
       const links = new Map<string, string>();
       // Code spans and fenced blocks are examples, not rendered attachment links.
       const tokens =
-        /(?<fence>`{3,}|~{3,})[^\r\n]*\r?\n[\s\S]*?^\k<fence>[ \t]*(?:\r?\n|$)|(?<ticks>`+)[\s\S]*?\k<ticks>|!?\[(?<label>[^\]\r\n]*)\]\((?<url>https:\/\/raw\.githubusercontent\.com\/[^\s)]+)\)/gm;
+        /(?<fence>`{3,}|~{3,})[^\r\n]*\r?\n[\s\S]*?^\k<fence>[ \t]*(?:\r?\n|$)|(?<ticks>`+)[\s\S]*?\k<ticks>|!?\[(?<label>[^\]\r\n]*)\]\((?<url>https:\/\/(?:raw\.githubusercontent\.com|github\.com)\/[^\s)]+)\)/gm;
       const edits: Array<{ start: number; end: number; text: string }> = [];
       for (const match of issue.body.matchAll(tokens)) {
         if (!match.groups?.url) continue;
@@ -113,8 +114,9 @@ export async function repairGitHubLinks(
         const prefix = `/${config.owner}/${config.repo}/`.toLowerCase();
         const marker = `/.bugpin/files/${target.reportId}/`;
         const markerIndex = url.pathname.indexOf(marker, prefix.length);
+        const isRaw = url.origin === 'https://raw.githubusercontent.com';
         if (
-          url.origin !== 'https://raw.githubusercontent.com' ||
+          (!isRaw && !url.pathname.toLowerCase().startsWith(`${prefix}blob/`)) ||
           !url.pathname.toLowerCase().startsWith(prefix) ||
           markerIndex < 0
         )
@@ -127,6 +129,14 @@ export async function repairGitHubLinks(
           filename === '..'
         )
           continue;
+        const isImage = /\.(png|jpe?g|gif|webp|svg|bmp|tiff?|avif|ico)$/i.test(filename);
+        if (!isRaw) {
+          const text = githubFileMarkdown(match.groups.label, url.href, isImage);
+          if (!isImage || text === match[0]) continue;
+          edits.push({ start: match.index, end: match.index + match[0].length, text });
+          replacements++;
+          continue;
+        }
         const path = `.bugpin/files/${target.reportId}/${filename}`;
         let replacement = links.get(path);
         if (!replacement) {
@@ -149,7 +159,7 @@ export async function repairGitHubLinks(
         edits.push({
           start: match.index,
           end: match.index + match[0].length,
-          text: `[${match.groups.label}](${replacement})`,
+          text: githubFileMarkdown(match.groups.label, replacement, isImage),
         });
         replacements++;
       }

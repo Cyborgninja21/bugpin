@@ -156,6 +156,8 @@ export function useDraggableLauncher(wrapperRef: RefObject<HTMLDivElement>, onCl
   return {
     style,
     isDragging: livePosition !== null,
+    /** Edge the user docked the launcher to, or null while it sits in the configured corner */
+    dockedSide: position?.side ?? null,
     /** Whether the launcher sits in the upper half, so the tooltip should open below it */
     isNearTop: livePosition
       ? livePosition.top < window.innerHeight / 2

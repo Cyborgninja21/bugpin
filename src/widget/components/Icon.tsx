@@ -1,4 +1,11 @@
-import { Bug, MessageSquare, AlertCircle, type LucideIcon } from 'lucide-preact';
+import {
+  Bug,
+  MessageSquare,
+  AlertCircle,
+  Lightbulb,
+  Newspaper,
+  type LucideIcon,
+} from 'lucide-preact';
 
 interface IconProps {
   name: string;
@@ -11,6 +18,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   bug: Bug,
   'message-square': MessageSquare,
   'alert-circle': AlertCircle,
+  lightbulb: Lightbulb,
+  newspaper: Newspaper,
 };
 
 export const Icon = ({ name, class: className, size = 18, strokeWidth = 2 }: IconProps) => {

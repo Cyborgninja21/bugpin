@@ -2,6 +2,8 @@ import type { WidgetCatalog } from '../catalog.js';
 
 const ja: WidgetCatalog = {
   'tooltip.launcher': 'バグを見つけましたか？',
+  'launcher.menu.feature': '機能をリクエスト',
+  'launcher.menu.news': 'お知らせ',
 
   'aria.launcher': 'バグを報告',
   'aria.close': '閉じる',

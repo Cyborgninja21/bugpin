@@ -212,7 +212,7 @@ describe('draft storage', () => {
     await draftStorage.save(apiKey, formData, 'media', media, 'old@example.com');
 
     expect(await draftStorage.load(apiKey)).toBeNull();
-    expect(dom.window.localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
+    expect(localStorage.getItem(`bugpin-draft-${apiKey}`)).toBeNull();
     expect(await draftStorage.has(apiKey)).toBe(false);
   });
 
@@ -237,7 +237,7 @@ describe('draft storage', () => {
     ];
 
     await draftStorage.save(apiKey, formData, 'media', media, 'old@example.com');
-    dom.window.localStorage.removeItem(`bugpin-draft-${apiKey}`);
+    localStorage.removeItem(`bugpin-draft-${apiKey}`);
 
     expect(await draftStorage.load(apiKey, 'new@example.com')).toBeNull();
     expect(await draftStorage.has(apiKey)).toBe(false);

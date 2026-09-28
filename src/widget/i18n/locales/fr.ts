@@ -33,6 +33,8 @@ const fr: WidgetCatalog = {
   'dialog.buttons.submit': 'Envoyer le rapport',
 
   'dialog.branding.poweredBy': 'Powered by',
+  'dialog.branding.reports': 'Rapports',
+  'dialog.branding.app': 'Ouvrir BugPin',
 
   'validation.title.required': 'Le titre est obligatoire',
   'validation.title.minLength': 'Le titre doit comporter au moins 4 caractères',

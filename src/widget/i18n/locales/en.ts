@@ -31,6 +31,8 @@ const en = {
   'dialog.buttons.submit': 'Submit Report',
 
   'dialog.branding.poweredBy': 'Powered by',
+  'dialog.branding.reports': 'Reports',
+  'dialog.branding.app': 'Open BugPin',
 
   'validation.title.required': 'Title is required',
   'validation.title.minLength': 'Title must be at least 4 characters',

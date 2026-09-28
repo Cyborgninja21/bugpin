@@ -499,6 +499,8 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           onReduceScreenshotQualityChange={setReduceScreenshotQuality}
           oversizedCapture={oversizedCapture}
           onDismissOversizedCapture={() => setOversizedCapture(null)}
+          reportsUrl={config.reportsUrl ?? null}
+          appUrl={config.serverUrl}
         />
       )}
 

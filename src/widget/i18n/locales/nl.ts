@@ -34,6 +34,8 @@ const nl: WidgetCatalog = {
   'dialog.buttons.submit': 'Rapport verzenden',
 
   'dialog.branding.poweredBy': 'Powered by',
+  'dialog.branding.reports': 'Meldingen',
+  'dialog.branding.app': 'BugPin openen',
 
   'validation.title.required': 'Titel is verplicht',
   'validation.title.minLength': 'Titel moet minstens 4 tekens bevatten',

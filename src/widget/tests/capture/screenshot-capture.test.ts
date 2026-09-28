@@ -17,6 +17,7 @@ const originalDocument = globalThis.document;
 const originalNavigator = globalThis.navigator;
 const originalHTMLElement = globalThis.HTMLElement;
 const originalSetTimeout = globalThis.setTimeout;
+const originalClearTimeout = globalThis.clearTimeout;
 
 class FakeStyle {
   background = '';
@@ -130,9 +131,49 @@ afterEach(() => {
   globalThis.navigator = originalNavigator;
   globalThis.HTMLElement = originalHTMLElement;
   globalThis.setTimeout = originalSetTimeout;
+  globalThis.clearTimeout = originalClearTimeout;
 });
 
 describe('captureScreenshot', () => {
+  for (const state of ['pending', 'decoding', 'load-decoding', 'loaded', 'error'] as const) {
+    it(`continues capture and cleans up image listeners when an image is ${state}`, async () => {
+      const { html, widget } = setupDom();
+      const clearTimeoutSpy = mock(originalClearTimeout);
+      globalThis.clearTimeout = clearTimeoutSpy as typeof clearTimeout;
+      const events = new EventTarget();
+      const image = Object.assign(new FakeElement('img'), {
+        complete: state === 'decoding',
+        loading: 'lazy',
+        decode: mock(() =>
+          state.includes('decoding') ? new Promise<void>(() => {}) : Promise.resolve()
+        ),
+        addEventListener: mock((type: string, listener: EventListener) => {
+          events.addEventListener(type, listener);
+          if (type === 'error' && state !== 'pending') {
+            queueMicrotask(() =>
+              events.dispatchEvent(new Event(state === 'error' ? 'error' : 'load'))
+            );
+          }
+        }),
+        removeEventListener: mock((type: string, listener: EventListener) =>
+          events.removeEventListener(type, listener)
+        ),
+      });
+      html.querySelectorAll = (selector: string) => (selector === 'img' ? [image] : []);
+      const { captureScreenshot } = await import('../../capture/screenshot');
+
+      expect(await captureScreenshot({ method: 'visible' })).toBe('data:image/png;base64,stub');
+      expect(widget.style.visibility).toBe('visible');
+      expect(image.loading).toBe('lazy');
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+      expect(image.removeEventListener).toHaveBeenCalledWith('load', expect.any(Function));
+      expect(image.removeEventListener).toHaveBeenCalledWith('error', expect.any(Function));
+      const decodeCalls = image.decode.mock.calls.length;
+      events.dispatchEvent(new Event('load'));
+      expect(image.decode.mock.calls.length).toBe(decodeCalls);
+    });
+  }
+
   it('uses Screen Capture API when enabled', async () => {
     let trackStopped = false;
     const track = {

@@ -1,3 +1,4 @@
+import { githubFileMarkdown } from './github-markdown.js';
 import { logger } from '../../utils/logger.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 import { readFile } from '../../storage/files.js';
@@ -442,7 +443,7 @@ ${metadata.userActivity
       for (const screenshot of screenshots) {
         const githubUrl = uploadedUrls?.get(screenshot.filename);
         if (githubUrl) {
-          body += `\n[${screenshot.filename}](${githubUrl})\n`;
+          body += `\n${githubFileMarkdown(screenshot.filename, githubUrl, screenshot.mimeType.startsWith('image/'))}\n`;
         } else if (screenshot.mimeType.startsWith('video/')) {
           const videoUrl = appUrl
             ? `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`
@@ -473,7 +474,7 @@ ${metadata.userActivity
       for (const attachment of attachments) {
         const githubUrl = uploadedUrls?.get(attachment.filename);
         if (githubUrl) {
-          body += `\n[${attachment.filename}](${githubUrl})\n`;
+          body += `\n${githubFileMarkdown(attachment.filename, githubUrl, attachment.mimeType.startsWith('image/'))}\n`;
         } else if (attachment.mimeType.startsWith('video/')) {
           const videoUrl = appUrl
             ? `${appUrl}/api/public/files/${report.id}/${attachment.filename}`

@@ -94,7 +94,9 @@ function click(target: Element) {
 
 function key(target: Element, keyName: string, altKey = true) {
   act(() => {
-    target.dispatchEvent(new window.KeyboardEvent('keydown', { key: keyName, altKey, bubbles: true }));
+    target.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: keyName, altKey, bubbles: true })
+    );
   });
 }
 
@@ -159,6 +161,28 @@ describe('draggable launcher', () => {
 
     click(button);
     expect(clicks).toBe(1);
+  });
+
+  it('captures the pointer on press so a fast flick cannot escape the button', () => {
+    const captured: number[] = [];
+    const proto = globalThis.HTMLElement.prototype as unknown as {
+      setPointerCapture: (id: number) => void;
+    };
+    proto.setPointerCapture = (id: number) => {
+      captured.push(id);
+    };
+    const { button } = renderLauncher(() => undefined);
+    const down = new window.MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      clientX: 950,
+      clientY: 750,
+    });
+    Object.defineProperty(down, 'pointerId', { value: 7 });
+    act(() => {
+      button.dispatchEvent(down);
+    });
+    expect(captured).toEqual([7]);
   });
 
   it('restores the remembered position on the next page', () => {

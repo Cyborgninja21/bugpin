@@ -32,10 +32,7 @@ interface DragState {
  * The chosen spot is remembered per site; Alt+Arrow keys move it and
  * Alt+Home returns it to the configured corner.
  */
-export function useDraggableLauncher(
-  wrapperRef: RefObject<HTMLDivElement>,
-  onClick: () => void
-) {
+export function useDraggableLauncher(wrapperRef: RefObject<HTMLDivElement>, onClick: () => void) {
   const [position, setPosition] = useState<LauncherPosition | null>(() => loadLauncherPosition());
   const [livePosition, setLivePosition] = useState<{ left: number; top: number } | null>(null);
   const drag = useRef<DragState | null>(null);
@@ -60,6 +57,17 @@ export function useDraggableLauncher(
       height: rect.height,
       moved: false,
     };
+    // Capture now, not after the drag threshold: a quick flick can leave the
+    // button between two pointermove events, and uncaptured moves then go to
+    // the page instead, so the drag never starts.
+    const target = event.currentTarget as Element | null;
+    if (event.pointerId !== undefined && target?.setPointerCapture) {
+      try {
+        target.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer already released
+      }
+    }
   };
 
   const onPointerMove = (event: PointerEvent) => {
@@ -69,14 +77,6 @@ export function useDraggableLauncher(
       const distance = Math.hypot(event.clientX - state.startX, event.clientY - state.startY);
       if (distance < DRAG_THRESHOLD) return;
       state.moved = true;
-      const target = event.currentTarget as Element | null;
-      if (state.pointerId !== undefined && target?.setPointerCapture) {
-        try {
-          target.setPointerCapture(state.pointerId);
-        } catch {
-          // Pointer already released
-        }
-      }
     }
     const maxLeft = window.innerWidth - state.width - LAUNCHER_EDGE_MARGIN;
     const maxTop = window.innerHeight - state.height - LAUNCHER_EDGE_MARGIN;
@@ -89,6 +89,10 @@ export function useDraggableLauncher(
   const endDrag = (event: PointerEvent, cancelled: boolean) => {
     const state = drag.current;
     drag.current = null;
+    const target = event.currentTarget as Element | null;
+    if (state?.pointerId !== undefined && target?.hasPointerCapture?.(state.pointerId)) {
+      target.releasePointerCapture(state.pointerId);
+    }
     if (!state?.moved) return;
     suppressClick.current = !cancelled;
     const left = Math.max(0, event.clientX - state.offsetX);

@@ -2,6 +2,8 @@ import type { WidgetCatalog } from '../catalog.js';
 
 const fr: WidgetCatalog = {
   'tooltip.launcher': 'Vous avez trouvé un bug ?',
+  'launcher.menu.feature': 'Proposer une fonctionnalité',
+  'launcher.menu.news': 'Nouveautés',
 
   'aria.launcher': 'Signaler un bug',
   'aria.close': 'Fermer',

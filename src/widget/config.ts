@@ -63,6 +63,12 @@ export interface WidgetConfig {
   maxImageUploadSize: number;
   maxVideoUploadSize: number;
   reportTypes: WidgetReportTypesConfig;
+  /**
+   * Link for the launcher's "What's new" button; hidden when null. `{tld}` is
+   * replaced by the host page's top-level domain, so one setting serves both
+   * the LAN and the public domain.
+   */
+  newsUrl?: string | null;
 }
 
 export const defaultConfig: WidgetConfig = {
@@ -115,4 +121,5 @@ export const defaultConfig: WidgetConfig = {
   maxImageUploadSize: 10 * 1024 * 1024, // 10MB
   maxVideoUploadSize: 50 * 1024 * 1024, // 50MB
   reportTypes: { enabled: ['bug'], default: 'bug' },
+  newsUrl: null,
 };

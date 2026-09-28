@@ -90,6 +90,7 @@ async function fetchConfig(
             : undefined,
           language: cfg.language,
           reportTypes: cfg.reportTypes,
+          newsUrl: cfg.newsUrl ?? null,
         };
       }
     } else if (response.status === 403) {

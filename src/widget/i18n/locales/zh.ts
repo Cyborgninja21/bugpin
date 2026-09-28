@@ -2,6 +2,8 @@ import type { WidgetCatalog } from '../catalog.js';
 
 const zh: WidgetCatalog = {
   'tooltip.launcher': '发现缺陷了？',
+  'launcher.menu.feature': '功能请求',
+  'launcher.menu.news': '最新动态',
 
   'aria.launcher': '报告缺陷',
   'aria.close': '关闭',

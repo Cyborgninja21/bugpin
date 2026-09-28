@@ -4,6 +4,7 @@ import { Icon } from './Icon.js';
 import { cn } from '../lib/utils';
 import { useEffectiveTheme } from '../hooks/use-effective-theme.js';
 import { useDraggableLauncher } from '../hooks/use-draggable-launcher.js';
+import { useLauncherMenu, resolveNewsUrl } from '../hooks/use-launcher-menu.js';
 import { useLocale } from '../hooks/use-locale.js';
 import { getLocale, t } from '../i18n/index.js';
 import { resolveLauncherText } from '../i18n/resolve-launcher-text.js';
@@ -29,7 +30,16 @@ interface WidgetLauncherButtonProps {
   tooltipEnabled: boolean;
   tooltipText: LauncherTextBundle;
   onClick: () => void;
+  /** Opens the dialog preset to a feature request; null hides the menu entry */
+  onRequestFeature?: (() => void) | null;
+  /** "What's new" link (`{tld}` filled from the page); null hides the menu entry */
+  newsUrl?: string | null;
 }
+
+const menuItemClass =
+  'flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-full border-none shadow-lg cursor-pointer whitespace-nowrap no-underline animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards]';
+
+const menuItemStyle = { opacity: 0 };
 
 const positionClasses: Record<string, string> = {
   'bottom-right': 'bottom-5 right-5',
@@ -58,6 +68,8 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
   tooltipEnabled,
   tooltipText,
   onClick,
+  onRequestFeature = null,
+  newsUrl = null,
 }) => {
   useLocale();
   const [isHovered, setIsHovered] = useState(false);
@@ -71,6 +83,63 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const draggable = useDraggableLauncher(wrapperRef, onClick);
   const tooltipBelow = draggable.style ? draggable.isNearTop : position.startsWith('top');
+  const alignLeft = draggable.dockedSide
+    ? draggable.dockedSide === 'left'
+    : position.endsWith('left');
+  const resolvedNewsUrl = newsUrl ? resolveNewsUrl(newsUrl, window.location.hostname) : null;
+  const hasMenu = Boolean(onRequestFeature || resolvedNewsUrl);
+  const menu = useLauncherMenu(hasMenu && !draggable.isDragging);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const focusMenuItem = (step: 1 | -1 | 0) => {
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []
+    );
+    if (items.length === 0) return;
+    const root = menuRef.current?.getRootNode() as Document | ShadowRoot | undefined;
+    const current = items.indexOf(root?.activeElement as HTMLElement);
+    const next = step === 0 || current < 0 ? 0 : (current + step + items.length) % items.length;
+    items[next].focus();
+  };
+
+  // Keyboard opens move focus into the menu once it has rendered
+  const focusMenuOnOpen = useRef(false);
+  useEffect(() => {
+    if (menu.isOpen && focusMenuOnOpen.current) {
+      focusMenuOnOpen.current = false;
+      focusMenuItem(0);
+    }
+  }, [menu.isOpen]);
+
+  const openMenuFromKeyboard = () => {
+    focusMenuOnOpen.current = true;
+    menu.open();
+  };
+
+  const onLauncherKeyDown = (event: KeyboardEvent) => {
+    if (!event.altKey && hasMenu && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault();
+      openMenuFromKeyboard();
+      return;
+    }
+    draggable.handlers.onKeyDown(event);
+  };
+
+  const onMenuKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      menu.close();
+      buttonRef.current?.focus();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusMenuItem(event.key === 'ArrowDown' ? 1 : -1);
+    }
+  };
+
+  const onWrapperFocusOut = (event: FocusEvent) => {
+    const next = event.relatedTarget as Node | null;
+    if (menu.isOpen && !(next && wrapperRef.current?.contains(next))) menu.close();
+  };
   const effectiveTheme = useEffectiveTheme(theme);
   const isDarkMode = effectiveTheme === 'dark';
   const activeLocale = getLocale();
@@ -160,7 +229,54 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
       ref={wrapperRef}
       class={cn('fixed z-[2147483647]', !draggable.style && positionClasses[position])}
       style={draggable.style ?? undefined}
+      onPointerEnter={menu.onPointerEnter}
+      onPointerLeave={menu.onPointerLeave}
+      onFocusOut={onWrapperFocusOut}
     >
+      {menu.isOpen && (
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label={ariaLabel}
+          class={cn(
+            'absolute flex gap-2',
+            tooltipBelow ? 'top-full pt-2 flex-col' : 'bottom-full pb-2 flex-col-reverse',
+            alignLeft ? 'left-0 items-start' : 'right-0 items-end'
+          )}
+          onKeyDown={onMenuKeyDown}
+        >
+          {onRequestFeature && (
+            <button
+              type="button"
+              role="menuitem"
+              class={menuItemClass}
+              style={{ ...menuItemStyle, backgroundColor: tooltipBgColor, color: tooltipTextColor }}
+              onClick={() => {
+                menu.close();
+                onRequestFeature();
+              }}
+            >
+              <Icon name="lightbulb" size={16} strokeWidth={2} />
+              <span>{t('launcher.menu.feature')}</span>
+            </button>
+          )}
+          {resolvedNewsUrl && (
+            <a
+              role="menuitem"
+              href={resolvedNewsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class={menuItemClass}
+              style={{ ...menuItemStyle, backgroundColor: tooltipBgColor, color: tooltipTextColor }}
+              onClick={() => menu.close()}
+            >
+              <Icon name="newspaper" size={16} strokeWidth={2} />
+              <span>{t('launcher.menu.news')}</span>
+            </a>
+          )}
+        </div>
+      )}
+
       <button
         ref={buttonRef}
         class={cn(
@@ -178,6 +294,13 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
           touchAction: 'none',
         }}
         {...draggable.handlers}
+        onPointerDown={(event: PointerEvent) => {
+          menu.close();
+          draggable.handlers.onPointerDown(event);
+        }}
+        onKeyDown={onLauncherKeyDown}
+        aria-haspopup={hasMenu ? 'menu' : undefined}
+        aria-expanded={hasMenu ? menu.isOpen : undefined}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         aria-label={ariaLabel}
@@ -189,45 +312,49 @@ export const WidgetLauncherButton: FunctionComponent<WidgetLauncherButtonProps> 
         {resolvedButtonText && <span>{resolvedButtonText}</span>}
       </button>
 
-      {tooltipEnabled && resolvedTooltipText && isHovered && !draggable.isDragging && (
-        <div
-          ref={tooltipRef}
-          class={cn(
-            'absolute px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md',
-            tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
-          )}
-          style={{
-            backgroundColor: tooltipBgColor,
-            color: tooltipTextColor,
-            opacity: 0,
-            left: tooltipOffset.left,
-            transform: tooltipOffset.transform,
-          }}
-        >
-          {resolvedTooltipText}
+      {tooltipEnabled &&
+        resolvedTooltipText &&
+        isHovered &&
+        !draggable.isDragging &&
+        !menu.isOpen && (
           <div
+            ref={tooltipRef}
             class={cn(
-              'absolute border-4 border-solid border-transparent',
-              tooltipBelow ? 'bottom-full' : 'top-full'
+              'absolute px-3 py-1.5 text-xs rounded whitespace-nowrap pointer-events-none z-[2147483647] animate-[bugpin-tooltip-fade-in_0.2s_ease-in-out_forwards] shadow-md',
+              tooltipBelow ? 'top-full mt-2' : 'bottom-full mb-2'
             )}
-            style={
-              tooltipBelow
-                ? {
-                    left: tooltipOffset.arrowLeft,
-                    transform: 'translateX(-50%)',
-                    marginBottom: '-4px',
-                    borderBottomColor: tooltipBgColor,
-                  }
-                : {
-                    left: tooltipOffset.arrowLeft,
-                    transform: 'translateX(-50%)',
-                    marginTop: '-4px',
-                    borderTopColor: tooltipBgColor,
-                  }
-            }
-          />
-        </div>
-      )}
+            style={{
+              backgroundColor: tooltipBgColor,
+              color: tooltipTextColor,
+              opacity: 0,
+              left: tooltipOffset.left,
+              transform: tooltipOffset.transform,
+            }}
+          >
+            {resolvedTooltipText}
+            <div
+              class={cn(
+                'absolute border-4 border-solid border-transparent',
+                tooltipBelow ? 'bottom-full' : 'top-full'
+              )}
+              style={
+                tooltipBelow
+                  ? {
+                      left: tooltipOffset.arrowLeft,
+                      transform: 'translateX(-50%)',
+                      marginBottom: '-4px',
+                      borderBottomColor: tooltipBgColor,
+                    }
+                  : {
+                      left: tooltipOffset.arrowLeft,
+                      transform: 'translateX(-50%)',
+                      marginTop: '-4px',
+                      borderTopColor: tooltipBgColor,
+                    }
+              }
+            />
+          </div>
+        )}
     </div>
   );
 };

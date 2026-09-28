@@ -1,5 +1,6 @@
 import { FunctionComponent } from 'preact';
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
+import type { ReportType } from '@shared/types';
 import { WidgetConfig } from '../config.js';
 import { WidgetLauncherButton } from './WidgetLauncherButton.js';
 import { WidgetDialog, FormData } from './WidgetDialog.js';
@@ -68,6 +69,10 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     limitMb: number;
   } | null>(null);
 
+  // Report type to apply once any draft has loaded. A menu shortcut always wins; a plain
+  // open only resets the type when there is no draft, so a menu pick doesn't stick.
+  const presetReportType = useRef<{ type: ReportType; overridesDraft: boolean } | null>(null);
+
   // Load draft when widget opens
   useEffect(() => {
     if (step === 'form' && !draftLoaded) {
@@ -76,6 +81,11 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           setFormData(draft.formData);
           setActiveTab(draft.activeTab);
           setMedia(draft.media);
+        }
+        const preset = presetReportType.current;
+        presetReportType.current = null;
+        if (preset && (preset.overridesDraft || !draft)) {
+          setFormData((current) => ({ ...current, reportType: preset.type }));
         }
         setDraftLoaded(true);
       });
@@ -126,9 +136,32 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
     config.dialogDarkForegroundColor,
   ]);
 
+  const enabledReportTypes = config.reportTypes?.enabled ?? ['bug'];
+  const defaultReportType = config.reportTypes?.default ?? 'bug';
+
   const handleOpenWidget = useCallback(() => {
+    if (step === 'closed') {
+      presetReportType.current = { type: defaultReportType, overridesDraft: false };
+    }
     setStep('form');
-  }, []);
+  }, [step, defaultReportType]);
+
+  // Open the dialog with a report type preselected (launcher menu shortcut)
+  const handleOpenWithType = useCallback(
+    (reportType: ReportType) => {
+      if (!enabledReportTypes.includes(reportType)) {
+        setStep('form');
+        return;
+      }
+      if (step === 'closed') {
+        presetReportType.current = { type: reportType, overridesDraft: true };
+      } else {
+        setFormData((current) => ({ ...current, reportType }));
+      }
+      setStep('form');
+    },
+    [enabledReportTypes, step]
+  );
 
   // Check if there's any content in the form
   const hasContent =
@@ -422,6 +455,10 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
         tooltipEnabled={config.tooltipEnabled}
         tooltipText={config.tooltipText}
         onClick={handleOpenWidget}
+        onRequestFeature={
+          enabledReportTypes.includes('feature') ? () => handleOpenWithType('feature') : null
+        }
+        newsUrl={config.newsUrl ?? null}
       />
 
       {step === 'annotating' && annotatingMedia && (
@@ -448,7 +485,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
           isSubmitting={isSubmitting}
           isCapturing={isCapturing}
           enableAnnotation={config.enableAnnotation}
-          enabledReportTypes={config.reportTypes?.enabled ?? ['bug']}
+          enabledReportTypes={enabledReportTypes}
           maxImageSize={config.maxImageUploadSize}
           maxVideoSize={config.maxVideoUploadSize}
           activeTab={activeTab}

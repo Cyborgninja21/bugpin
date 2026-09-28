@@ -528,6 +528,8 @@ widget.get('/config/:apiKey', async (c) => {
           project.settings?.reportTypes?.enabled?.[0] ??
           ('bug' as ReportType),
       },
+      // Target of the launcher's "What's new" button; `{tld}` is filled in by the widget
+      newsUrl: process.env.WIDGET_NEWS_URL || null,
     },
   });
 });

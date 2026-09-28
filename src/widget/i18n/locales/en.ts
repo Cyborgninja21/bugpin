@@ -1,5 +1,7 @@
 const en = {
   'tooltip.launcher': 'Found a bug?',
+  'launcher.menu.feature': 'Request a feature',
+  'launcher.menu.news': "What's new",
 
   'aria.launcher': 'Report Bug',
   'aria.close': 'Close',

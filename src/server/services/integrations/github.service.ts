@@ -182,8 +182,8 @@ async function uploadFileToGitHub(
     );
 
     if (getResponse.ok) {
-      const existing = (await getResponse.json()) as { download_url: string };
-      return { url: existing.download_url };
+      const existing = (await getResponse.json()) as { html_url: string };
+      return { url: existing.html_url };
     }
 
     // Upload file
@@ -208,8 +208,8 @@ async function uploadFileToGitHub(
       return { url: null, error: errorMessage };
     }
 
-    const result = (await putResponse.json()) as { content: { download_url: string } };
-    return { url: result.content.download_url };
+    const result = (await putResponse.json()) as { content: { html_url: string } };
+    return { url: result.content.html_url };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.error(`Failed to upload file ${fileName} to GitHub: ${message}`);
@@ -442,7 +442,7 @@ ${metadata.userActivity
       for (const screenshot of screenshots) {
         const githubUrl = uploadedUrls?.get(screenshot.filename);
         if (githubUrl) {
-          body += `\n![${screenshot.filename}](${githubUrl})\n`;
+          body += `\n[${screenshot.filename}](${githubUrl})\n`;
         } else if (screenshot.mimeType.startsWith('video/')) {
           const videoUrl = appUrl
             ? `${appUrl}/api/public/files/${report.id}/${screenshot.filename}`
@@ -473,11 +473,7 @@ ${metadata.userActivity
       for (const attachment of attachments) {
         const githubUrl = uploadedUrls?.get(attachment.filename);
         if (githubUrl) {
-          if (attachment.mimeType.startsWith('image/')) {
-            body += `\n![${attachment.filename}](${githubUrl})\n`;
-          } else {
-            body += `\n[${attachment.filename}](${githubUrl})\n`;
-          }
+          body += `\n[${attachment.filename}](${githubUrl})\n`;
         } else if (attachment.mimeType.startsWith('video/')) {
           const videoUrl = appUrl
             ? `${appUrl}/api/public/files/${report.id}/${attachment.filename}`

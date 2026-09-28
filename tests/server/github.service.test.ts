@@ -12,7 +12,7 @@ import {
 } from '../../src/server/services/integrations/github.service';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { logger } from '../../src/server/utils/logger';
-import type { Report } from '../../src/shared/types';
+import type { FileRecord, Report } from '../../src/shared/types';
 
 const originalFetch = globalThis.fetch;
 const originalSettingsRepo = { ...settingsRepo };
@@ -50,6 +50,75 @@ afterEach(() => {
 });
 
 describe('github service', () => {
+  for (const operation of ['create', 'update'] as const) {
+    for (const exists of [false, true]) {
+      it(`${operation} uses durable links for ${exists ? 'existing' : 'new'} uploaded files`, async () => {
+        const files: FileRecord[] = [
+          { type: 'screenshot', filename: 'screenshot.png', mimeType: 'image/png' },
+          { type: 'attachment', filename: 'image.png', mimeType: 'image/png' },
+          { type: 'attachment', filename: 'log.txt', mimeType: 'text/plain' },
+        ].map((file, index) => ({
+          ...file,
+          type: file.type as FileRecord['type'],
+          id: `file_${index}`,
+          reportId: baseReport.id,
+          path: `https://storage.example.com/${file.filename}`,
+          sizeBytes: 3,
+          createdAt: baseReport.createdAt,
+        }));
+        let issueBody = '';
+        let uploads = 0;
+        globalThis.fetch = async (input, init) => {
+          const url = String(input);
+          if (url.startsWith('https://storage.example.com/')) return new Response('abc');
+          if (url.includes('/contents/')) {
+            const path = url.split('/contents/')[1];
+            const content = {
+              html_url: `https://github.com/org/repo/blob/develop/${path}`,
+              download_url: `https://raw.githubusercontent.com/org/repo/develop/${path}?token=temporary`,
+            };
+            if (init?.method === 'PUT') {
+              uploads++;
+              return Response.json({ content }, { status: 201 });
+            }
+            return exists ? Response.json(content) : new Response('', { status: 404 });
+          }
+          if (url.includes('/issues')) {
+            expect(init?.method).toBe(operation === 'create' ? 'POST' : 'PATCH');
+            issueBody = (JSON.parse(init?.body as string) as { body: string }).body;
+            return Response.json({
+              number: 123,
+              html_url: 'https://github.com/org/repo/issues/123',
+            });
+          }
+          throw new Error(`Unexpected request: ${url}`);
+        };
+        const config = {
+          owner: 'org',
+          repo: 'repo',
+          accessToken: 'token',
+          fileTransferMode: 'upload' as const,
+        };
+        const report = { ...baseReport, files };
+        const result =
+          operation === 'create'
+            ? await createGitHubIssue(report, config)
+            : await updateGitHubIssue(123, report, config);
+
+        expect(result.success).toBe(true);
+        expect(uploads).toBe(exists ? 0 : files.length);
+        for (const file of files) {
+          expect(issueBody).toContain(
+            `[${file.filename}](https://github.com/org/repo/blob/develop/.bugpin/files/${baseReport.id}/${file.filename})`
+          );
+        }
+        expect(issueBody).not.toContain('![');
+        expect(issueBody).not.toContain('raw.githubusercontent.com');
+        expect(issueBody).not.toContain('token=');
+      });
+    }
+  }
+
   it('rejects create issue with missing config', async () => {
     const result = await createGitHubIssue(baseReport, {
       owner: '',

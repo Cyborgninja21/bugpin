@@ -109,10 +109,10 @@ describe('github service', () => {
         expect(uploads).toBe(exists ? 0 : files.length);
         for (const file of files) {
           expect(issueBody).toContain(
-            `[${file.filename}](https://github.com/org/repo/blob/develop/.bugpin/files/${baseReport.id}/${file.filename})`
+            `${file.mimeType.startsWith('image/') ? '!' : ''}[${file.filename}](https://github.com/org/repo/blob/develop/.bugpin/files/${baseReport.id}/${file.filename}${file.mimeType.startsWith('image/') ? '?raw=1' : ''})`
           );
         }
-        expect(issueBody).not.toContain('![');
+        expect(issueBody).not.toContain('![log.txt]');
         expect(issueBody).not.toContain('raw.githubusercontent.com');
         expect(issueBody).not.toContain('token=');
       });

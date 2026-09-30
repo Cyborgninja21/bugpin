@@ -1,4 +1,5 @@
 import { toCanvas } from 'html-to-image';
+import { withLiveScrollbars } from './scrollbars';
 import { withXmlSafeSerialization } from './xml-safe-serialization';
 
 type ToCanvasOptions = NonNullable<Parameters<typeof toCanvas>[1]>;
@@ -160,6 +161,19 @@ function shouldIncludeNode(node: Node): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Render `element` with html-to-image. The clone is prepared right before
+ * serialization so it stays valid XML and shows only the scrollbars the live page shows.
+ */
+function renderToCanvas(
+  element: HTMLElement,
+  options: ToCanvasOptions
+): Promise<HTMLCanvasElement> {
+  return withLiveScrollbars(element, shouldIncludeNode, () =>
+    withXmlSafeSerialization(() => toCanvas(element, options))
+  );
 }
 
 /**
@@ -514,7 +528,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const fullCanvas = await withXmlSafeSerialization(() => toCanvas(element, toCanvasOptions));
+      const fullCanvas = await renderToCanvas(element, toCanvasOptions);
 
       // Debug: log actual canvas dimensions
       console.log('[BugPin] Canvas captured:', {
@@ -582,7 +596,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const canvas = await withXmlSafeSerialization(() => toCanvas(element, toCanvasOptions));
+      const canvas = await renderToCanvas(element, toCanvasOptions);
       return canvas.toDataURL('image/png');
     }
 
@@ -599,7 +613,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       filter: shouldIncludeNode,
     };
 
-    const canvas = await withXmlSafeSerialization(() => toCanvas(element, toCanvasOptions));
+    const canvas = await renderToCanvas(element, toCanvasOptions);
     return canvas.toDataURL('image/png');
   } finally {
     // Restore visibility of all BugPin elements

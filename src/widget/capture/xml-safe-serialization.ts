@@ -1,4 +1,4 @@
-const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+import { withCaptureSvgPreparer } from './capture-svg-hook';
 
 // NCName from Namespaces in XML 1.0: an XML Name without ':'.
 // https://www.w3.org/TR/xml/#NT-NameStartChar
@@ -7,12 +7,6 @@ const NC_NAME =
 
 // Only these prefixes are bound without an explicit xmlns declaration.
 const PREDECLARED_PREFIXES = new Set(['xml', 'xmlns']);
-
-type SerializeToString = XMLSerializer['serializeToString'];
-
-let activeScopes = 0;
-let originalSerialize: SerializeToString | null = null;
-let installedSerialize: SerializeToString | null = null;
 
 /**
  * Whether the browser serializer can emit this attribute as well-formed XML.
@@ -47,80 +41,9 @@ function removeXmlUnsafeAttributes(root: Element): void {
 }
 
 /**
- * html-to-image serializes a detached `<svg><foreignObject>` wrapper around its
- * own clone of the page. Anything connected to the document, or shaped
- * differently, belongs to someone else and is passed through untouched.
- */
-function isDetachedCaptureSvg(node: Node | null | undefined): node is SVGSVGElement {
-  if (!node || node.nodeType !== 1 || node.isConnected) {
-    return false;
-  }
-  const element = node as Element;
-  const firstChild = element.firstElementChild;
-  return (
-    element.namespaceURI === SVG_NAMESPACE &&
-    element.localName === 'svg' &&
-    firstChild !== null &&
-    firstChild.namespaceURI === SVG_NAMESPACE &&
-    firstChild.localName === 'foreignObject'
-  );
-}
-
-function install(prototype: XMLSerializer): void {
-  const original = prototype.serializeToString;
-  const safeSerialize: SerializeToString = function (this: XMLSerializer, node: Node) {
-    if (isDetachedCaptureSvg(node)) {
-      removeXmlUnsafeAttributes(node);
-    }
-    return original.call(this, node);
-  };
-  try {
-    prototype.serializeToString = safeSerialize;
-  } catch {
-    // A host page may have frozen the prototype. Capture then runs unpatched.
-    return;
-  }
-  if (prototype.serializeToString === safeSerialize) {
-    originalSerialize = original;
-    installedSerialize = safeSerialize;
-  }
-}
-
-function uninstall(prototype: XMLSerializer): void {
-  // Leave the method alone if the host page replaced it while capture was running.
-  if (originalSerialize && prototype.serializeToString === installedSerialize) {
-    try {
-      prototype.serializeToString = originalSerialize;
-    } catch {
-      // The host page locked the property after install; the patch stays inert outside capture SVGs.
-    }
-  }
-  originalSerialize = null;
-  installedSerialize = null;
-}
-
-/**
  * Run a DOM capture while XML serialization drops attributes whose names are
- * not valid XML. The patch only acts on the detached capture SVG, never on the
- * live page, and is removed once the last overlapping capture settles.
+ * not valid XML. Only the detached capture SVG is changed, never the live page.
  */
-export async function withXmlSafeSerialization<T>(run: () => Promise<T>): Promise<T> {
-  if (typeof XMLSerializer === 'undefined') {
-    return run();
-  }
-
-  const prototype = XMLSerializer.prototype;
-  if (activeScopes === 0) {
-    install(prototype);
-  }
-  activeScopes += 1;
-
-  try {
-    return await run();
-  } finally {
-    activeScopes -= 1;
-    if (activeScopes === 0) {
-      uninstall(prototype);
-    }
-  }
+export function withXmlSafeSerialization<T>(run: () => Promise<T>): Promise<T> {
+  return withCaptureSvgPreparer(removeXmlUnsafeAttributes, run);
 }

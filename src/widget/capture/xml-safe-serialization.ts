@@ -5,8 +5,8 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const NC_NAME =
   /^[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}][A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}\-.0-9\u00B7\u0300-\u036F\u203F-\u2040]*$/u;
 
-// Only these prefixes are bound without an explicit xmlns declaration.
-const PREDECLARED_PREFIXES = new Set(['xml', 'xmlns']);
+const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
+const NO_PREFIXES: ReadonlySet<string> = new Set();
 
 type SerializeToString = XMLSerializer['serializeToString'];
 
@@ -21,11 +21,15 @@ let installedSerialize: SerializeToString | null = null;
 
 /**
  * Whether the browser serializer can emit this attribute as well-formed XML.
- * Attributes created by the HTML parser have no namespace, so names such as
- * `wire:navigate`, `x-on:click`, `@click` or `:class` are written verbatim and
- * make the resulting SVG image fail to decode.
+ * Attributes created by the HTML parser or `setAttribute` have no namespace, so
+ * names such as `wire:navigate`, `x-on:click`, `@click` or `:class` are written
+ * verbatim. A prefixed name is only valid when its prefix is declared in scope,
+ * as with `xlink:href` under `xmlns:xlink`.
  */
-export function isXmlSafeAttribute(attribute: Attr): boolean {
+export function isXmlSafeAttribute(
+  attribute: Attr,
+  prefixesInScope: ReadonlySet<string> = NO_PREFIXES
+): boolean {
   if (attribute.namespaceURI !== null) {
     return true;
   }
@@ -38,16 +42,47 @@ export function isXmlSafeAttribute(attribute: Attr): boolean {
 
   const prefix = name.slice(0, colonIndex);
   const localName = name.slice(colonIndex + 1);
-  return PREDECLARED_PREFIXES.has(prefix) && NC_NAME.test(localName);
+  if (!NC_NAME.test(prefix) || !NC_NAME.test(localName)) {
+    return false;
+  }
+  if (prefix === 'xmlns') {
+    // A prefix cannot be declared with an empty namespace in XML 1.0.
+    return attribute.value !== '';
+  }
+  return prefix === 'xml' || prefixesInScope.has(prefix);
 }
 
-function removeXmlUnsafeAttributes(root: Element): void {
-  for (const element of Array.from(root.querySelectorAll('*'))) {
-    for (const attribute of Array.from(element.attributes)) {
-      if (!isXmlSafeAttribute(attribute)) {
-        element.removeAttributeNode(attribute);
-      }
+/**
+ * Prefixes the serialized output declares for `element` and its descendants:
+ * explicit `xmlns:prefix` attributes, and the prefixes of namespaced elements and
+ * attributes, which the serializer declares where it writes them. Counting a
+ * prefix that might be bound keeps the attribute, as the output did without cleanup.
+ */
+function scopeFor(element: Element, inherited: ReadonlySet<string>): ReadonlySet<string> {
+  const declared: string[] = element.prefix ? [element.prefix] : [];
+  for (const attribute of Array.from(element.attributes)) {
+    if (attribute.namespaceURI === XMLNS_NAMESPACE) {
+      if (attribute.prefix === 'xmlns' && attribute.value) declared.push(attribute.localName);
+    } else if (attribute.namespaceURI !== null) {
+      if (attribute.prefix) declared.push(attribute.prefix);
+    } else if (attribute.name.startsWith('xmlns:') && attribute.value) {
+      declared.push(attribute.name.slice('xmlns:'.length));
     }
+  }
+
+  const added = declared.filter((prefix) => !inherited.has(prefix));
+  return added.length === 0 ? inherited : new Set([...inherited, ...added]);
+}
+
+function removeXmlUnsafeAttributes(element: Element, inherited: ReadonlySet<string>): void {
+  const scope = scopeFor(element, inherited);
+  for (const attribute of Array.from(element.attributes)) {
+    if (!isXmlSafeAttribute(attribute, scope)) {
+      element.removeAttributeNode(attribute);
+    }
+  }
+  for (const child of Array.from(element.children)) {
+    removeXmlUnsafeAttributes(child, scope);
   }
 }
 
@@ -72,8 +107,9 @@ function findOwnedCloneRoot(node: Node | null | undefined): CloneRoot | null {
   ) {
     return null;
   }
-  const cloneRoot = foreignObject.firstElementChild;
-  if (!(cloneRoot instanceof HTMLElement || cloneRoot instanceof SVGElement)) {
+  // Not `instanceof`: a clone made from an iframe document belongs to that iframe's realm.
+  const cloneRoot = foreignObject.firstElementChild as CloneRoot | null;
+  if (!cloneRoot?.style) {
     return null;
   }
   return activeCaptures.has(cloneRoot.style.animationName) ? cloneRoot : null;
@@ -85,7 +121,7 @@ function install(prototype: XMLSerializer): void {
     const cloneRoot = findOwnedCloneRoot(node);
     if (cloneRoot) {
       cloneRoot.style.animationName = activeCaptures.get(cloneRoot.style.animationName) ?? '';
-      removeXmlUnsafeAttributes(node as Element);
+      removeXmlUnsafeAttributes(node as Element, NO_PREFIXES);
     }
     return original.call(this, node);
   };
@@ -114,6 +150,18 @@ function uninstall(prototype: XMLSerializer): void {
   installedSerialize = null;
 }
 
+// html-to-image clones a same-origin iframe's body in place of the iframe itself.
+function clonedElementFor(root: Element): Element {
+  if (root instanceof HTMLIFrameElement) {
+    try {
+      return root.contentDocument?.body ?? root;
+    } catch {
+      return root;
+    }
+  }
+  return root;
+}
+
 /**
  * Run an html-to-image capture of `root` while XML serialization drops
  * attributes whose names are not valid XML from that capture's clone.
@@ -138,7 +186,9 @@ export async function withXmlSafeSerialization<T>(
   }
   captureCount += 1;
   const marker = `bugpin-capture-${captureCount}-${Math.random().toString(36).slice(2)}`;
-  activeCaptures.set(marker, window.getComputedStyle(root).animationName);
+  const cloned = clonedElementFor(root);
+  const view = cloned.ownerDocument.defaultView ?? window;
+  activeCaptures.set(marker, view.getComputedStyle(cloned).animationName);
 
   try {
     // Without an active patch the marker would reach the output, so it is only set when the patch runs.

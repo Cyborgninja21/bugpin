@@ -114,6 +114,17 @@ describe('isXmlSafeAttribute', () => {
     expect(isXmlSafeAttribute(attributeOf(markup))).toBe(true);
   });
 
+  it('keeps a prefixed attribute only when its prefix is declared in scope', () => {
+    const attribute = attributeOf('<a inkscape:label="Layer 1">');
+    expect(isXmlSafeAttribute(attribute)).toBe(false);
+    expect(isXmlSafeAttribute(attribute, new Set(['inkscape']))).toBe(true);
+    expect(isXmlSafeAttribute(attribute, new Set(['other']))).toBe(false);
+  });
+
+  it('rejects a prefix declaration with an empty namespace', () => {
+    expect(isXmlSafeAttribute(attributeOf('<a xmlns:og="">'))).toBe(false);
+  });
+
   it('keeps namespaced attributes such as xlink:href on inline SVG', () => {
     const host = document.createElement('div');
     host.innerHTML = '<svg><use xlink:href="#icon"></use></svg>';
@@ -347,6 +358,59 @@ describe('withXmlSafeSerialization', () => {
 
     expect(nativeMessage).not.toBe('no error');
     expect(wrappedMessage).toBe(nativeMessage);
+  });
+
+  it('keeps prefixed attributes that a declaration in the output binds', async () => {
+    document.body.innerHTML =
+      '<div id="icons">' +
+      '<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">' +
+      '<g inkscape:label="Layer 1" wire:key="g1"><use id="scripted"></use></g>' +
+      '</svg><a href="/" wire:navigate>Home</a></div>';
+    document.getElementById('scripted')!.setAttribute('xlink:href', '#dot');
+    const root = document.getElementById('icons')!;
+
+    const markup = await withXmlSafeSerialization(root, async (captureStyle) =>
+      new XMLSerializer().serializeToString(
+        buildOwnedCaptureSvg(root.cloneNode(true) as HTMLElement, captureStyle)
+      )
+    );
+
+    expect(hasParserError(markup)).toBe(false);
+    expect(markup).toContain('inkscape:label="Layer 1"');
+    expect(markup).toContain('xlink:href="#dot"');
+    expect(markup).not.toContain('wire:key');
+    expect(markup).not.toContain('wire:navigate');
+  });
+
+  it('removes prefixed attributes whose prefix is declared only outside the captured element', async () => {
+    document.body.innerHTML =
+      '<svg xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><g id="layer" inkscape:label="Layer 1"></g></svg>';
+    const root = document.getElementById('layer')!;
+
+    const markup = await withXmlSafeSerialization(root, async (captureStyle) =>
+      new XMLSerializer().serializeToString(
+        buildOwnedCaptureSvg(root.cloneNode(true) as HTMLElement, captureStyle)
+      )
+    );
+
+    expect(hasParserError(markup)).toBe(false);
+    expect(markup).not.toContain('inkscape:label');
+  });
+
+  it('cleans the clone when the capture target is an iframe', async () => {
+    document.body.innerHTML = '<iframe id="frame"></iframe>';
+    const frame = document.getElementById('frame') as HTMLIFrameElement;
+    frame.contentDocument!.body.innerHTML = FRAMEWORK_MARKUP;
+    const options = { skipFonts: true, width: 200, height: 100 };
+
+    const unsafe = decodeSvgDataUrl(await toSvg(frame, options));
+    const safe = decodeSvgDataUrl(
+      await withXmlSafeSerialization(frame, (style) => toSvg(frame, { ...options, style }))
+    );
+
+    expect(hasParserError(unsafe)).toBe(true);
+    expect(hasParserError(safe)).toBe(false);
+    expect(safe).not.toContain('bugpin-capture');
   });
 
   // Fails if html-to-image stops applying its style option to the root clone or stops

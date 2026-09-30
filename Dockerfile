@@ -16,7 +16,6 @@ WORKDIR /app
 # Install dependencies first (better layer caching)
 # Copy package manifests and the required lockfile
 COPY package.json bun.lock ./
-COPY patches ./patches
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/
@@ -57,7 +56,6 @@ RUN apk update && apk upgrade --no-cache && apk add --no-cache tini wget
 
 # Copy the workspace manifests and lockfile before installing server dependencies
 COPY package.json bun.lock ./
-COPY patches ./patches
 COPY src/server/package.json ./src/server/
 COPY src/admin/package.json ./src/admin/
 COPY src/widget/package.json ./src/widget/

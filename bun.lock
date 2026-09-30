@@ -120,9 +120,6 @@
       },
     },
   },
-  "patchedDependencies": {
-    "html-to-image@1.11.13": "patches/html-to-image@1.11.13.patch",
-  },
   "overrides": {
     "brace-expansion": "^2.0.3",
     "dompurify": "^3.4.2",

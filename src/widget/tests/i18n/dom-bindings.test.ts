@@ -40,6 +40,7 @@ describe('installLanguageObservers', () => {
     teardownObservers();
     teardownObservers = () => {};
     teardownDom();
+    __resetI18nForTests();
   });
 
   describe('manual mode', () => {
@@ -151,6 +152,7 @@ describe('publicSetLanguage', () => {
 
   afterEach(() => {
     teardownDom();
+    __resetI18nForTests();
   });
 
   it('returns the resolved locale and switches when input is supported', () => {

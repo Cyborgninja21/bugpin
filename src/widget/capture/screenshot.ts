@@ -1,4 +1,5 @@
 import { toCanvas } from 'html-to-image';
+import { withXmlSafeSerialization } from './xml-safe-serialization';
 
 type ToCanvasOptions = NonNullable<Parameters<typeof toCanvas>[1]>;
 
@@ -513,7 +514,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const fullCanvas = await toCanvas(element, toCanvasOptions);
+      const fullCanvas = await withXmlSafeSerialization(() => toCanvas(element, toCanvasOptions));
 
       // Debug: log actual canvas dimensions
       console.log('[BugPin] Canvas captured:', {
@@ -581,7 +582,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const canvas = await toCanvas(element, toCanvasOptions);
+      const canvas = await withXmlSafeSerialization(() => toCanvas(element, toCanvasOptions));
       return canvas.toDataURL('image/png');
     }
 
@@ -598,7 +599,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       filter: shouldIncludeNode,
     };
 
-    const canvas = await toCanvas(element, toCanvasOptions);
+    const canvas = await withXmlSafeSerialization(() => toCanvas(element, toCanvasOptions));
     return canvas.toDataURL('image/png');
   } finally {
     // Restore visibility of all BugPin elements

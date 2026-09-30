@@ -8,7 +8,10 @@ const toCanvasSpy = mock(async (_element: unknown, options?: Record<string, unkn
   };
 });
 
+// Bun keeps module mocks for later test files, so keep the real exports available.
+const actualHtmlToImage = await import('html-to-image');
 mock.module('html-to-image', () => ({
+  ...actualHtmlToImage,
   toCanvas: toCanvasSpy,
 }));
 

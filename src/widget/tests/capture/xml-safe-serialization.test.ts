@@ -24,6 +24,7 @@ const EXTRA_DOM_GLOBALS = [
   'HTMLSelectElement',
   'HTMLTextAreaElement',
   'HTMLVideoElement',
+  'SVGElement',
   'SVGImageElement',
 ] as const;
 
@@ -72,6 +73,15 @@ function buildCaptureSvg(content: Element): SVGSVGElement {
   return svg;
 }
 
+/** Mirrors html-to-image, which applies its `style` option to the root clone before wrapping it. */
+function buildOwnedCaptureSvg(
+  clone: HTMLElement,
+  captureStyle: Partial<CSSStyleDeclaration>
+): SVGSVGElement {
+  Object.assign(clone.style, captureStyle);
+  return buildCaptureSvg(clone);
+}
+
 function attributeOf(markup: string): Attr {
   const host = document.createElement('div');
   host.innerHTML = markup;
@@ -114,74 +124,144 @@ describe('isXmlSafeAttribute', () => {
 });
 
 describe('withXmlSafeSerialization', () => {
-  it('produces well-formed XML for a detached capture SVG with framework attributes', async () => {
+  it('produces well-formed XML for its own capture SVG with framework attributes', async () => {
     document.body.innerHTML = FRAMEWORK_MARKUP;
-    const clone = document.querySelector('main')!.cloneNode(true) as Element;
+    const main = document.querySelector('main')!;
+    const unsafeClone = main.cloneNode(true) as Element;
 
-    expect(hasParserError(new XMLSerializer().serializeToString(buildCaptureSvg(clone)))).toBe(
-      true
-    );
+    expect(
+      hasParserError(new XMLSerializer().serializeToString(buildCaptureSvg(unsafeClone)))
+    ).toBe(true);
 
-    const svg = buildCaptureSvg(clone.cloneNode(true) as Element);
-    const markup = await withXmlSafeSerialization(async () =>
-      new XMLSerializer().serializeToString(svg)
+    const markup = await withXmlSafeSerialization(main, async (captureStyle) =>
+      new XMLSerializer().serializeToString(
+        buildOwnedCaptureSvg(main.cloneNode(true) as HTMLElement, captureStyle)
+      )
     );
 
     expect(hasParserError(markup)).toBe(false);
     expect(markup).not.toContain('wire:');
     expect(markup).not.toContain('@click');
     expect(markup).not.toContain(':class');
+    expect(markup).not.toContain('bugpin-capture');
     expect(markup).toContain('x-data=');
     expect(markup).toContain('class="card"');
-    expect(markup).toContain('style="color: red"');
+    expect(markup).toContain('color: red');
     expect(markup).toContain('href="/"');
     expect(markup).toContain('value="Ada"');
   });
 
+  it('puts back the live animation-name it uses as the capture marker', async () => {
+    document.body.innerHTML = FRAMEWORK_MARKUP;
+    const main = document.querySelector('main')!;
+    main.style.animationName = 'fade-in';
+    const clone = main.cloneNode(true) as HTMLElement;
+
+    await withXmlSafeSerialization(main, async (captureStyle) => {
+      const svg = buildOwnedCaptureSvg(clone, captureStyle);
+      expect(clone.style.animationName).toStartWith('bugpin-capture-');
+      new XMLSerializer().serializeToString(svg);
+    });
+
+    expect(clone.style.animationName).toBe('fade-in');
+  });
+
   it('never modifies the live page', async () => {
     document.body.innerHTML = FRAMEWORK_MARKUP;
+    const main = document.querySelector('main')!;
     const before = document.body.innerHTML;
 
-    const liveMarkup = await withXmlSafeSerialization(async () => {
+    const liveMarkup = await withXmlSafeSerialization(main, async (captureStyle) => {
       const serializer = new XMLSerializer();
       serializer.serializeToString(
-        buildCaptureSvg(document.querySelector('main')!.cloneNode(true) as Element)
+        buildOwnedCaptureSvg(main.cloneNode(true) as HTMLElement, captureStyle)
       );
-      return serializer.serializeToString(document.querySelector('main')!);
+      return serializer.serializeToString(main);
     });
 
     expect(document.body.innerHTML).toBe(before);
     expect(liveMarkup).toContain('wire:navigate');
   });
 
-  it('passes through detached nodes that are not a capture SVG', async () => {
+  it('leaves SVGs it does not own untouched, including capture-shaped ones', async () => {
+    document.body.innerHTML = FRAMEWORK_MARKUP;
+    const main = document.querySelector('main')!;
+    const hostExport = buildCaptureSvg(main.cloneNode(true) as Element);
     const detached = document.createElement('div');
     detached.innerHTML = FRAMEWORK_MARKUP;
 
-    const plainSvg = document.createElementNS(SVG_NAMESPACE, 'svg');
-    plainSvg.appendChild(document.createElementNS(SVG_NAMESPACE, 'g'));
-    plainSvg.firstElementChild!.setAttribute('data-x', '1');
-
-    const [divMarkup, svgMarkup] = await withXmlSafeSerialization(async () => {
+    const [exportMarkup, divMarkup] = await withXmlSafeSerialization(main, async () => {
       const serializer = new XMLSerializer();
-      return [serializer.serializeToString(detached), serializer.serializeToString(plainSvg)];
+      return [serializer.serializeToString(hostExport), serializer.serializeToString(detached)];
     });
 
+    expect(exportMarkup).toContain('wire:navigate');
+    expect(hostExport.querySelector('a')!.hasAttribute('wire:navigate')).toBe(true);
     expect(divMarkup).toContain('wire:navigate');
     expect(detached.querySelector('a')!.hasAttribute('wire:navigate')).toBe(true);
-    expect(svgMarkup).toContain('data-x="1"');
+  });
+
+  it('leaves another export of the same element untouched, whichever starts first', async () => {
+    document.body.innerHTML = FRAMEWORK_MARKUP;
+    const target = document.querySelector('main') as HTMLElement;
+    const options = { skipFonts: true, width: 200, height: 100 };
+    const capture = () =>
+      withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style }));
+
+    const [captureFirst, exportSecond] = await Promise.all([capture(), toSvg(target, options)]);
+    const [exportFirst, captureSecond] = await Promise.all([toSvg(target, options), capture()]);
+
+    for (const own of [captureFirst, captureSecond].map(decodeSvgDataUrl)) {
+      expect(hasParserError(own)).toBe(false);
+      expect(own).not.toContain('bugpin-capture');
+    }
+    for (const other of [exportFirst, exportSecond].map(decodeSvgDataUrl)) {
+      expect(other).toContain('wire:navigate');
+    }
+  });
+
+  it('leaves a concurrent export of a different element untouched', async () => {
+    document.body.innerHTML =
+      FRAMEWORK_MARKUP + '<section><a href="/" wire:navigate>Other</a></section>';
+    const target = document.querySelector('main') as HTMLElement;
+    const other = document.querySelector('section') as HTMLElement;
+    const options = { skipFonts: true, width: 200, height: 100 };
+
+    const [own, unrelated] = await Promise.all([
+      withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style })),
+      toSvg(other, options),
+    ]);
+
+    expect(hasParserError(decodeSvgDataUrl(own))).toBe(false);
+    expect(decodeSvgDataUrl(unrelated)).toContain('wire:navigate');
+  });
+
+  it('cleans every clone when captures of the same element overlap', async () => {
+    document.body.innerHTML = FRAMEWORK_MARKUP;
+    const target = document.querySelector('main') as HTMLElement;
+    const options = { skipFonts: true, width: 200, height: 100 };
+    const capture = () =>
+      withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style }));
+
+    const results = await Promise.all([capture(), capture()]);
+
+    for (const result of results.map(decodeSvgDataUrl)) {
+      expect(hasParserError(result)).toBe(false);
+      expect(result).not.toContain('bugpin-capture');
+    }
   });
 
   it('restores the original serializer after success and failure', async () => {
+    const root = document.body;
     const original = XMLSerializer.prototype.serializeToString;
 
-    await withXmlSafeSerialization(async () => {
+    await withXmlSafeSerialization(root, async () => {
       expect(XMLSerializer.prototype.serializeToString).not.toBe(original);
     });
     expect(XMLSerializer.prototype.serializeToString).toBe(original);
 
     await expect(
-      withXmlSafeSerialization(async () => {
+      withXmlSafeSerialization(root, async () => {
         throw new Error('capture failed');
       })
     ).rejects.toThrow('capture failed');
@@ -189,14 +269,15 @@ describe('withXmlSafeSerialization', () => {
   });
 
   it('keeps the patch until the last overlapping capture settles', async () => {
+    const root = document.body;
     const original = XMLSerializer.prototype.serializeToString;
     let releaseFirst: () => void = () => {};
     const firstDone = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
 
-    const first = withXmlSafeSerialization(() => firstDone);
-    await withXmlSafeSerialization(async () => {});
+    const first = withXmlSafeSerialization(root, () => firstDone);
+    await withXmlSafeSerialization(root, async () => {});
     expect(XMLSerializer.prototype.serializeToString).not.toBe(original);
 
     releaseFirst();
@@ -210,7 +291,7 @@ describe('withXmlSafeSerialization', () => {
       return original.call(this, node);
     };
 
-    await withXmlSafeSerialization(async () => {
+    await withXmlSafeSerialization(document.body, async () => {
       XMLSerializer.prototype.serializeToString = hostSerialize;
     });
 
@@ -218,12 +299,13 @@ describe('withXmlSafeSerialization', () => {
     XMLSerializer.prototype.serializeToString = original;
   });
 
-  it('runs the capture unchanged when XMLSerializer is unavailable', async () => {
+  it('runs the capture without a marker when XMLSerializer is unavailable', async () => {
+    const root = document.body;
     delete globals.XMLSerializer;
-    await expect(withXmlSafeSerialization(async () => 'ok')).resolves.toBe('ok');
+    await expect(withXmlSafeSerialization(root, async (style) => style)).resolves.toEqual({});
   });
 
-  it('runs the capture unpatched when the host page froze the serializer', async () => {
+  it('runs the capture unpatched and unmarked when the host page froze the serializer', async () => {
     const prototype = XMLSerializer.prototype;
     const original = prototype.serializeToString;
     Object.defineProperty(prototype, 'serializeToString', {
@@ -233,12 +315,11 @@ describe('withXmlSafeSerialization', () => {
     });
 
     try {
-      await expect(
-        withXmlSafeSerialization(async () => {
-          expect(prototype.serializeToString).toBe(original);
-          return 'ok';
-        })
-      ).resolves.toBe('ok');
+      const style = await withXmlSafeSerialization(document.body, async (captureStyle) => {
+        expect(prototype.serializeToString).toBe(original);
+        return captureStyle;
+      });
+      expect(style).toEqual({});
       expect(prototype.serializeToString).toBe(original);
     } finally {
       Object.defineProperty(prototype, 'serializeToString', {
@@ -260,22 +341,29 @@ describe('withXmlSafeSerialization', () => {
     };
 
     const nativeMessage = serializeNull();
-    const wrappedMessage = await withXmlSafeSerialization(async () => serializeNull());
+    const wrappedMessage = await withXmlSafeSerialization(document.body, async () =>
+      serializeNull()
+    );
 
     expect(nativeMessage).not.toBe('no error');
     expect(wrappedMessage).toBe(nativeMessage);
   });
 
+  // Fails if html-to-image stops applying its style option to the root clone or stops
+  // serializing through XMLSerializer, the two behaviors this fix relies on.
   it('makes html-to-image output decodable on framework markup', async () => {
     document.body.innerHTML = FRAMEWORK_MARKUP;
     const target = document.querySelector('main') as HTMLElement;
     const options = { skipFonts: true, width: 200, height: 100 };
 
     const unsafe = decodeSvgDataUrl(await toSvg(target, options));
-    const safe = decodeSvgDataUrl(await withXmlSafeSerialization(() => toSvg(target, options)));
+    const safe = decodeSvgDataUrl(
+      await withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style }))
+    );
 
     expect(hasParserError(unsafe)).toBe(true);
     expect(hasParserError(safe)).toBe(false);
+    expect(safe).not.toContain('bugpin-capture');
     expect(target.querySelector('a')!.hasAttribute('wire:navigate')).toBe(true);
   });
 });

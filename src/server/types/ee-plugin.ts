@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import type { Hono } from 'hono';
 import type { Report, EmailTemplateType, User, CustomEmailTemplates } from '@shared/types';
 import type { Result } from '../utils/result.js';
@@ -6,6 +7,7 @@ import type { Result } from '../utils/result.js';
  * Storage provider interface for S3 or other storage backends
  */
 export interface StorageProvider {
+  read(path: string): Promise<Result<Uint8Array>>;
   upload(options: StorageUploadOptions): Promise<Result<StorageUploadResult>>;
   delete(key: string): Promise<Result<void>>;
   exists(key: string): Promise<Result<boolean>>;
@@ -15,7 +17,9 @@ export interface StorageProvider {
 
 export interface StorageUploadOptions {
   key: string;
-  body: Buffer | Uint8Array | ReadableStream;
+  body: Buffer | Uint8Array | ReadableStream | Readable;
+  contentLength?: number;
+  checksumSHA256?: string;
   contentType: string;
   metadata?: Record<string, string>;
 }
@@ -121,13 +125,6 @@ export interface WhiteLabelService {
  * When EE is available and licensed, these hooks invoke EE functionality.
  * When EE is not available, these are no-ops or return defaults.
  */
-export interface EEHooks {
-  // Webhook hooks
-  onReportCreated(report: Report): Promise<void>;
-  onReportUpdated(
-    report: Report,
-    changes: Record<string, { old: unknown; new: unknown }>
-  ): Promise<void>;
 export interface ProjectLicenseStatus {
   projectLimit: number | null;
   usedProjects: number;
@@ -143,6 +140,13 @@ export interface ProjectLicenseService {
   selectProjects(projectIds: unknown): Result<ProjectLicenseStatus>;
 }
 
+export interface EEHooks {
+  // Webhook hooks
+  onReportCreated(report: Report): Promise<void>;
+  onReportUpdated(
+    report: Report,
+    changes: Record<string, { old: unknown; new: unknown }>
+  ): Promise<void>;
   onReportDeleted(report: Report): Promise<void>;
 
   // Storage provider hook

@@ -1,7 +1,7 @@
 import { reportsRepo, type CreateReportData } from '../database/repositories/reports.repo.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
-import { saveFile, deleteReportFiles, readFile, validateFile } from '../storage/files.js';
+import { saveFile, deleteReportFiles, readStoredFile, validateFile } from '../storage/files.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
@@ -292,7 +292,7 @@ async function createForProject(
   );
   if (!saveFilesResult.success) {
     if (options.strictFileValidation) {
-      deleteReportFiles(report.id);
+      await deleteReportFiles(report.id);
       await filesRepo.deleteByReportId(report.id);
       await reportsRepo.delete(report.id);
     }
@@ -716,26 +716,33 @@ export const reportsService = {
     const access = checkProjectLicense(existing.projectId);
     if (!access.success) return access;
 
-    // Trigger webhooks via EE hooks before deletion (async, don't block)
-    getEEHooks()
-      .onReportDeleted(existing)
-      .catch((error) => {
-        logger.error('Failed to trigger webhooks for report deletion', error, { reportId: id });
-      });
-
-    // Send deletion notification before deleting (async, don't block)
-    notificationsService.notifyReportDeleted(existing).catch((error) => {
-      logger.error('Failed to send report deleted notification', error, { reportId: id });
-    });
-
-    // Delete files from filesystem
-    deleteReportFiles(id);
+    try {
+      await deleteReportFiles(id);
+    } catch (error) {
+      logger.error('Failed to delete report files', error, { reportId: id });
+      return Result.fail(
+        'Stored files could not be deleted; retry deletion',
+        'STORAGE_DELETE_FAILED'
+      );
+    }
 
     // Delete file records (cascade will handle this, but be explicit)
     await filesRepo.deleteByReportId(id);
 
     // Delete report
     await reportsRepo.delete(id);
+
+    // Trigger webhooks via EE hooks after deletion (async, don't block)
+    getEEHooks()
+      .onReportDeleted(existing)
+      .catch((error) => {
+        logger.error('Failed to trigger webhooks for report deletion', error, { reportId: id });
+      });
+
+    // Send deletion notification after deleting (async, don't block)
+    notificationsService.notifyReportDeleted(existing).catch((error) => {
+      logger.error('Failed to send report deleted notification', error, { reportId: id });
+    });
 
     logger.info('Report deleted', { reportId: id });
     return Result.ok(undefined);
@@ -875,7 +882,7 @@ export const reportsService = {
       return Result.fail('File not found', 'NOT_FOUND');
     }
 
-    const data = readFile(file.path);
+    const data = await readStoredFile(file.path);
 
     if (!data) {
       return Result.fail('File not found on disk', 'NOT_FOUND');

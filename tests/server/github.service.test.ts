@@ -1,3 +1,5 @@
+import { getEEHooks, registerEEHooks } from '../../src/server/utils/ee-hooks';
+import { Result } from '../../src/server/utils/result';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   createGitHubIssue,
@@ -14,6 +16,7 @@ import { settingsRepo } from '../../src/server/database/repositories/settings.re
 import { logger } from '../../src/server/utils/logger';
 import type { FileRecord, Report } from '../../src/shared/types';
 
+const originalHooks = getEEHooks();
 const originalFetch = globalThis.fetch;
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
@@ -36,6 +39,17 @@ const baseReport: Report = {
 };
 
 beforeEach(() => {
+  registerEEHooks({
+    ...originalHooks,
+    getStorageProvider: () => ({
+      read: async () => Result.ok(new Uint8Array([1, 2, 3])),
+      upload: async () => Result.fail('unused'),
+      delete: async () => Result.ok(undefined),
+      exists: async () => Result.ok(true),
+      testConnection: async () => Result.ok(undefined),
+      getStatus: async () => Result.ok({ enabled: true, configured: true }),
+    }),
+  });
   settingsRepo.getAll = async () => ({ appUrl: 'https://app.example.com' }) as never;
   logger.info = () => undefined;
   logger.error = () => undefined;
@@ -44,6 +58,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  registerEEHooks(originalHooks);
   globalThis.fetch = originalFetch;
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(logger, originalLogger);

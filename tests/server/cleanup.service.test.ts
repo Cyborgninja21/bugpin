@@ -29,6 +29,7 @@ beforeEach(() => {
     return true;
   };
 
+  filesRepo.findByReportId = async () => [];
   filesRepo.deleteByReportId = async (reportId: string) => {
     deletedFileReportIds.push(reportId);
   };

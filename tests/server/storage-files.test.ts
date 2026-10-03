@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
+import { filesRepo } from '../../src/server/database/repositories/files.repo';
 import { config } from '../../src/server/config';
 import {
   saveFile,
@@ -16,12 +17,13 @@ import {
   validateFile,
 } from '../../src/server/storage/files';
 
+const originalFindFiles = filesRepo.findByReportId;
 const originalConfig = { ...config };
 let tempDir = '';
 
 const pngBuffer = Buffer.from(
   '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6360000000020001E221BC330000000049454E44AE426082',
-  'hex',
+  'hex'
 );
 const jpegBuffer = Buffer.from([
   0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x02, 0x00, 0x03, 0x03, 0x01, 0x11, 0x00, 0x02,
@@ -49,6 +51,7 @@ function createWebpBufferVp8l(width: number, height: number) {
 }
 
 beforeAll(() => {
+  filesRepo.findByReportId = async () => [];
   tempDir = fs.mkdtempSync(path.join(tmpdir(), 'bugpin-files-'));
   Object.assign(config, {
     dataDir: tempDir,
@@ -65,6 +68,7 @@ afterAll(() => {
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+  filesRepo.findByReportId = originalFindFiles;
   Object.assign(config, originalConfig);
 });
 
@@ -95,7 +99,7 @@ describe('file storage', () => {
 
   it('handles missing files gracefully', async () => {
     expect(readFile(path.join(tempDir, 'missing.png'))).toBeNull();
-    expect(await deleteFile(path.join(tempDir, 'missing.png'))).toBe(false);
+    expect(await deleteFile(path.join(tempDir, 'missing.png'))).toBe(true);
     expect(getFileStats(path.join(tempDir, 'missing.png'))).toBeNull();
   });
 
@@ -124,7 +128,7 @@ describe('file storage', () => {
     expect(saved.filename.endsWith('.bin')).toBe(true);
   });
 
-  it('deletes report files across directories', () => {
+  it('deletes report files across directories', async () => {
     const reportId = 'rpt_files';
     const screenshotDir = path.join(config.screenshotsDir, reportId);
     const attachmentDir = path.join(config.attachmentsDir, reportId);
@@ -134,7 +138,7 @@ describe('file storage', () => {
     fs.writeFileSync(path.join(screenshotDir, 'a.png'), pngBuffer);
     fs.writeFileSync(path.join(attachmentDir, 'b.txt'), 'hello');
 
-    const removed = deleteReportFiles(reportId);
+    const removed = await deleteReportFiles(reportId);
     expect(removed).toBe(2);
   });
 
@@ -218,7 +222,11 @@ describe('validateFile', () => {
   });
 
   it('accepts valid WebP screenshot', () => {
-    const result = validateFile({ data: createWebpBufferVp8(10, 10), mimeType: 'image/webp', type: 'screenshot' });
+    const result = validateFile({
+      data: createWebpBufferVp8(10, 10),
+      mimeType: 'image/webp',
+      type: 'screenshot',
+    });
     expect(result.success).toBe(true);
   });
 
@@ -229,7 +237,11 @@ describe('validateFile', () => {
   });
 
   it('rejects disallowed MIME type for screenshot', () => {
-    const result = validateFile({ data: Buffer.from('hello'), mimeType: 'text/plain', type: 'screenshot' });
+    const result = validateFile({
+      data: Buffer.from('hello'),
+      mimeType: 'text/plain',
+      type: 'screenshot',
+    });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.code).toBe('INVALID_MIME_TYPE');
@@ -248,7 +260,12 @@ describe('validateFile', () => {
     const bigBuffer = Buffer.alloc(2 * 1024 * 1024); // 2MB
     // Write PNG header so magic bytes pass
     pngBuffer.copy(bigBuffer);
-    const result = validateFile({ data: bigBuffer, mimeType: 'image/png', type: 'screenshot', maxSizeMb: 1 });
+    const result = validateFile({
+      data: bigBuffer,
+      mimeType: 'image/png',
+      type: 'screenshot',
+      maxSizeMb: 1,
+    });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.code).toBe('FILE_TOO_LARGE');

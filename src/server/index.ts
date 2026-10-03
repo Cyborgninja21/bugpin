@@ -92,6 +92,7 @@ async function main(): Promise<void> {
   const app = createApp();
 
   const server = Bun.serve({
+    idleTimeout: 60,
     port: config.port,
     hostname: config.host,
     fetch: app.fetch,

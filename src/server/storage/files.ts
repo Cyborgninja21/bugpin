@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { generateFileId } from '../utils/id.js';
 import { logger } from '../utils/logger.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
+import { filesRepo } from '../database/repositories/files.repo.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { Result } from '../utils/result.js';
 import type { FileType } from '@shared/types';
@@ -246,7 +247,7 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFile> {
 
         return {
           id: fileId,
-          path: result.value.url, // S3 URL
+          path: `s3://${result.value.bucket}/${result.value.key}`,
           filename: storedFilename,
           mimeType,
           sizeBytes: buffer.length,
@@ -377,39 +378,16 @@ function isS3Url(path: string): boolean {
   return path.startsWith('https://') || path.startsWith('http://') || path.startsWith('s3://');
 }
 
-/**
- * Extract S3 key from URL
- * Handles various S3 URL formats:
- * - https://bucket.s3.region.amazonaws.com/key
- * - https://s3.region.amazonaws.com/bucket/key
- * - s3://bucket/key
- */
-function extractS3KeyFromUrl(url: string): string | null {
-  try {
-    if (url.startsWith('s3://')) {
-      // s3://bucket/key -> key
-      const parts = url.replace('s3://', '').split('/');
-      return parts.slice(1).join('/');
-    }
-
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-
-    // Remove leading slash and bucket name if in path-style URL
-    if (pathname.startsWith('/')) {
-      const parts = pathname.slice(1).split('/');
-      // If hostname contains bucket name, pathname is the key
-      if (urlObj.hostname.includes('.s3.')) {
-        return parts.join('/');
-      }
-      // Otherwise, first part is bucket, rest is key
-      return parts.slice(1).join('/');
-    }
-
-    return pathname;
-  } catch {
+export async function readStoredFile(filePath: string): Promise<Buffer | null> {
+  if (!isS3Url(filePath)) return readFile(path.resolve(config.projectRoot, filePath));
+  const provider = getEEHooks().getStorageProvider();
+  if (!provider) return null;
+  const result = await provider.read(filePath);
+  if (!result.success) {
+    logger.error('Failed to read stored object', { path: filePath, error: result.error });
     return null;
   }
+  return Buffer.from(result.value);
 }
 
 /**
@@ -421,25 +399,18 @@ export async function deleteFile(filePath: string): Promise<boolean> {
     if (isS3Url(filePath)) {
       const storageProvider = getEEHooks().getStorageProvider();
       if (storageProvider) {
-        const s3Key = extractS3KeyFromUrl(filePath);
-        if (s3Key) {
-          const result = await storageProvider.delete(s3Key);
-          if (result.success) {
-            logger.info('File deleted from S3', { key: s3Key });
-            return true;
-          }
-          logger.error('Failed to delete file from S3', { key: s3Key, error: result.error });
-          return false;
-        }
+        const result = await storageProvider.delete(filePath);
+        if (result.success) return true;
+        logger.error('Failed to delete stored object', { path: filePath, error: result.error });
+        return false;
       }
       logger.warn('Cannot delete S3 file: storage provider not available', { path: filePath });
       return false;
     }
 
+    filePath = path.resolve(config.projectRoot, filePath);
     // Local file deletion
-    if (!fs.existsSync(filePath)) {
-      return false;
-    }
+    if (!fs.existsSync(filePath)) return true;
     fs.unlinkSync(filePath);
     logger.info('File deleted from local storage', { path: filePath });
     return true;
@@ -450,14 +421,14 @@ export async function deleteFile(filePath: string): Promise<boolean> {
 }
 
 /**
- * Delete all LOCAL files for a report
- *
- * Note: This only deletes local files. S3 files should be deleted individually
- * through `deleteFile()` when attachments/screenshots are removed from the database.
- * The database tracks the actual path (local or S3 URL) for each file.
+ * Delete stored files before removing their database references.
  */
-export function deleteReportFiles(reportId: string): number {
+export async function deleteReportFiles(reportId: string): Promise<number> {
   let count = 0;
+  for (const file of await filesRepo.findByReportId(reportId)) {
+    if (!(await deleteFile(file.path))) throw new Error(`Unable to delete stored file ${file.id}`);
+    count++;
+  }
 
   for (const dir of [config.screenshotsDir, config.attachmentsDir]) {
     const reportDir = path.join(dir, reportId);
@@ -606,13 +577,6 @@ export interface FaviconSet {
   androidChrome512: string; // 512x512
   version: string;
 }
-  const stagedPath = `${filePath}.${crypto.randomUUID()}.tmp`;
-  try {
-    fs.writeFileSync(stagedPath, processedData);
-    fs.renameSync(stagedPath, filePath);
-  } finally {
-    fs.rmSync(stagedPath, { force: true });
-  }
 
 /**
  * Save branding logo or icon (light or dark mode)
@@ -642,6 +606,13 @@ export async function saveBrandingLogo(options: SaveBrandingLogoOptions): Promis
   const filePath = path.join(modeDir, filename);
 
   const finalMetadata = await sharp(processedData).metadata();
+  const stagedPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(stagedPath, processedData);
+    fs.renameSync(stagedPath, filePath);
+  } finally {
+    fs.rmSync(stagedPath, { force: true });
+  }
 
   logger.info(`Branding ${type} saved`, { mode, filename, size: processedData.length });
 
@@ -736,15 +707,6 @@ async function generateFaviconSizes(
     header.writeUInt32LE(images[3].length, 14);
     header.writeUInt32LE(22, 18);
     images[3] = Buffer.concat([header, images[3]]);
-  for (const name of fs.readdirSync(modeDir)) {
-    if (
-      (type === 'favicon' && name.startsWith('favicons-')) ||
-      (type !== 'favicon' && name.startsWith(`${type}-${mode}-`))
-    ) {
-      fs.rmSync(path.join(modeDir, name), { recursive: true, force: true });
-      deleted = true;
-    }
-  }
     for (let index = 0; index < names.length; index++)
       fs.writeFileSync(path.join(stagedDir, names[index]), images[index]);
     fs.renameSync(stagedDir, finalDir);
@@ -774,6 +736,15 @@ export function deleteBrandingAsset(
   }
 
   let deleted = false;
+  for (const name of fs.readdirSync(modeDir)) {
+    if (
+      (type === 'favicon' && name.startsWith('favicons-')) ||
+      (type !== 'favicon' && name.startsWith(`${type}-${mode}-`))
+    ) {
+      fs.rmSync(path.join(modeDir, name), { recursive: true, force: true });
+      deleted = true;
+    }
+  }
 
   if (type === 'logo') {
     // Delete logo files (try multiple extensions and naming conventions)

@@ -1,7 +1,7 @@
 import { githubFileMarkdown } from './github-markdown.js';
 import { logger } from '../../utils/logger.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
-import { readFile } from '../../storage/files.js';
+import { readStoredFile } from '../../storage/files.js';
 import type { Report, FileRecord } from '@shared/types';
 
 const MAX_GITHUB_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -221,26 +221,6 @@ async function uploadFileToGitHub(
 /**
  * Read a file buffer from local storage or remote URL (S3)
  */
-async function readFileBuffer(filePath: string): Promise<Buffer | null> {
-  // Check if path is a remote URL (S3 storage)
-  if (filePath.startsWith('https://') || filePath.startsWith('http://')) {
-    try {
-      const response = await fetch(filePath);
-      if (!response.ok) {
-        logger.warn(`Failed to fetch remote file: HTTP ${response.status}`, { path: filePath });
-        return null;
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    } catch (error) {
-      logger.warn('Error fetching remote file', { path: filePath, error });
-      return null;
-    }
-  }
-
-  // Local file
-  return readFile(filePath);
-}
 
 interface UploadFilesResult {
   uploadedUrls: Map<string, string>;
@@ -269,7 +249,7 @@ async function uploadReportFiles(
       continue;
     }
 
-    const buffer = await readFileBuffer(file.path);
+    const buffer = await readStoredFile(file.path);
     if (!buffer) {
       logger.warn(`Could not read file ${file.filename} at ${file.path}`);
       lastError = 'Could not read file from storage';

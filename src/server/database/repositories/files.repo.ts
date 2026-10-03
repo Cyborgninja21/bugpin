@@ -166,18 +166,15 @@ export const filesRepo = {
    */
   async countByStorageType(): Promise<{ local: number; s3: number }> {
     const db = getDb();
-    const rows = db.query('SELECT path FROM files').all() as { path: string }[];
-
-    let local = 0;
-    let s3 = 0;
-
-    for (const row of rows) {
-      if (row.path.startsWith('s3://') || row.path.startsWith('https://')) {
-        s3++;
-      } else {
-        local++;
-      }
-    }
+    const counts = db
+      .query(
+        `SELECT
+      COALESCE(SUM(CASE WHEN path LIKE 's3://%' OR path LIKE 'https://%' OR path LIKE 'http://%' THEN 1 ELSE 0 END), 0) AS s3,
+      COUNT(*) AS total FROM files`
+      )
+      .get() as { s3: number; total: number };
+    const { s3 } = counts;
+    const local = counts.total - s3;
 
     return { local, s3 };
   },

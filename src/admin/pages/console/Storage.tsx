@@ -400,6 +400,9 @@ function MigrationSection() {
       eventSourceRef.current.addEventListener('progress', (event) => {
         const data = JSON.parse(event.data) as MigrationProgress;
         setProgress(data);
+        if (['completed', 'failed', 'paused'].includes(data.status)) {
+          void queryClient.invalidateQueries({ queryKey: ['storage-stats'] });
+        }
       });
 
       eventSourceRef.current.onerror = () => {
@@ -412,7 +415,7 @@ function MigrationSection() {
     }
 
     return undefined;
-  }, [s3Enabled]);
+  }, [s3Enabled, queryClient]);
 
   const startMigration = async () => {
     try {

@@ -3,8 +3,8 @@ name: Build and Push Docker Image
 on:
   push:
     tags:
-      - 'v*.*.*'  # Matches both production (v1.0.0) and dev (v1.0.0-dev) tags
-  workflow_dispatch:  # Allows manual triggering
+      - 'v*.*.*' # Matches both production (v1.0.0) and dev (v1.0.0-dev) tags
+  workflow_dispatch: # Allows manual triggering
 
 env:
   HARBOR_REGISTRY: registry.arantic.cloud
@@ -34,6 +34,19 @@ jobs:
           else
             echo "is_dev=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.0'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify CE and EE
+        run: |
+          bun run typecheck
+          bun run test
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -87,7 +100,7 @@ jobs:
           build-args: APP_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64  # Add linux/arm64 if needed
+          platforms: linux/amd64 # Add linux/arm64 if needed
 
       - name: Image digest
         run: echo "Image pushed with digest ${{ steps.meta.outputs.digest }}"

@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { toSvg } from 'html-to-image';
 import { installDom } from '../helpers/dom';
-import { isXmlSafeAttribute, withXmlSafeSerialization } from '../../capture/xml-safe-serialization';
+import { withCaptureClone } from '../../capture/capture-clone';
+import {
+  isXmlSafeAttribute,
+  removeXmlUnsafeAttributes,
+} from '../../capture/xml-safe-serialization';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -134,7 +138,7 @@ describe('isXmlSafeAttribute', () => {
   });
 });
 
-describe('withXmlSafeSerialization', () => {
+describe('withCaptureClone with XML cleanup', () => {
   it('produces well-formed XML for its own capture SVG with framework attributes', async () => {
     document.body.innerHTML = FRAMEWORK_MARKUP;
     const main = document.querySelector('main')!;
@@ -144,7 +148,7 @@ describe('withXmlSafeSerialization', () => {
       hasParserError(new XMLSerializer().serializeToString(buildCaptureSvg(unsafeClone)))
     ).toBe(true);
 
-    const markup = await withXmlSafeSerialization(main, async (captureStyle) =>
+    const markup = await withCaptureClone(main, removeXmlUnsafeAttributes, async (captureStyle) =>
       new XMLSerializer().serializeToString(
         buildOwnedCaptureSvg(main.cloneNode(true) as HTMLElement, captureStyle)
       )
@@ -168,7 +172,7 @@ describe('withXmlSafeSerialization', () => {
     main.style.animationName = 'fade-in';
     const clone = main.cloneNode(true) as HTMLElement;
 
-    await withXmlSafeSerialization(main, async (captureStyle) => {
+    await withCaptureClone(main, removeXmlUnsafeAttributes, async (captureStyle) => {
       const svg = buildOwnedCaptureSvg(clone, captureStyle);
       expect(clone.style.animationName).toStartWith('bugpin-capture-');
       new XMLSerializer().serializeToString(svg);
@@ -182,13 +186,17 @@ describe('withXmlSafeSerialization', () => {
     const main = document.querySelector('main')!;
     const before = document.body.innerHTML;
 
-    const liveMarkup = await withXmlSafeSerialization(main, async (captureStyle) => {
-      const serializer = new XMLSerializer();
-      serializer.serializeToString(
-        buildOwnedCaptureSvg(main.cloneNode(true) as HTMLElement, captureStyle)
-      );
-      return serializer.serializeToString(main);
-    });
+    const liveMarkup = await withCaptureClone(
+      main,
+      removeXmlUnsafeAttributes,
+      async (captureStyle) => {
+        const serializer = new XMLSerializer();
+        serializer.serializeToString(
+          buildOwnedCaptureSvg(main.cloneNode(true) as HTMLElement, captureStyle)
+        );
+        return serializer.serializeToString(main);
+      }
+    );
 
     expect(document.body.innerHTML).toBe(before);
     expect(liveMarkup).toContain('wire:navigate');
@@ -201,10 +209,14 @@ describe('withXmlSafeSerialization', () => {
     const detached = document.createElement('div');
     detached.innerHTML = FRAMEWORK_MARKUP;
 
-    const [exportMarkup, divMarkup] = await withXmlSafeSerialization(main, async () => {
-      const serializer = new XMLSerializer();
-      return [serializer.serializeToString(hostExport), serializer.serializeToString(detached)];
-    });
+    const [exportMarkup, divMarkup] = await withCaptureClone(
+      main,
+      removeXmlUnsafeAttributes,
+      async () => {
+        const serializer = new XMLSerializer();
+        return [serializer.serializeToString(hostExport), serializer.serializeToString(detached)];
+      }
+    );
 
     expect(exportMarkup).toContain('wire:navigate');
     expect(hostExport.querySelector('a')!.hasAttribute('wire:navigate')).toBe(true);
@@ -217,7 +229,9 @@ describe('withXmlSafeSerialization', () => {
     const target = document.querySelector('main') as HTMLElement;
     const options = { skipFonts: true, width: 200, height: 100 };
     const capture = () =>
-      withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style }));
+      withCaptureClone(target, removeXmlUnsafeAttributes, (style) =>
+        toSvg(target, { ...options, style })
+      );
 
     const [captureFirst, exportSecond] = await Promise.all([capture(), toSvg(target, options)]);
     const [exportFirst, captureSecond] = await Promise.all([toSvg(target, options), capture()]);
@@ -239,7 +253,9 @@ describe('withXmlSafeSerialization', () => {
     const options = { skipFonts: true, width: 200, height: 100 };
 
     const [own, unrelated] = await Promise.all([
-      withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style })),
+      withCaptureClone(target, removeXmlUnsafeAttributes, (style) =>
+        toSvg(target, { ...options, style })
+      ),
       toSvg(other, options),
     ]);
 
@@ -252,7 +268,9 @@ describe('withXmlSafeSerialization', () => {
     const target = document.querySelector('main') as HTMLElement;
     const options = { skipFonts: true, width: 200, height: 100 };
     const capture = () =>
-      withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style }));
+      withCaptureClone(target, removeXmlUnsafeAttributes, (style) =>
+        toSvg(target, { ...options, style })
+      );
 
     const results = await Promise.all([capture(), capture()]);
 
@@ -266,13 +284,13 @@ describe('withXmlSafeSerialization', () => {
     const root = document.body;
     const original = XMLSerializer.prototype.serializeToString;
 
-    await withXmlSafeSerialization(root, async () => {
+    await withCaptureClone(root, removeXmlUnsafeAttributes, async () => {
       expect(XMLSerializer.prototype.serializeToString).not.toBe(original);
     });
     expect(XMLSerializer.prototype.serializeToString).toBe(original);
 
     await expect(
-      withXmlSafeSerialization(root, async () => {
+      withCaptureClone(root, removeXmlUnsafeAttributes, async () => {
         throw new Error('capture failed');
       })
     ).rejects.toThrow('capture failed');
@@ -287,8 +305,8 @@ describe('withXmlSafeSerialization', () => {
       releaseFirst = resolve;
     });
 
-    const first = withXmlSafeSerialization(root, () => firstDone);
-    await withXmlSafeSerialization(root, async () => {});
+    const first = withCaptureClone(root, removeXmlUnsafeAttributes, () => firstDone);
+    await withCaptureClone(root, removeXmlUnsafeAttributes, async () => {});
     expect(XMLSerializer.prototype.serializeToString).not.toBe(original);
 
     releaseFirst();
@@ -302,7 +320,7 @@ describe('withXmlSafeSerialization', () => {
       return original.call(this, node);
     };
 
-    await withXmlSafeSerialization(document.body, async () => {
+    await withCaptureClone(document.body, removeXmlUnsafeAttributes, async () => {
       XMLSerializer.prototype.serializeToString = hostSerialize;
     });
 
@@ -313,7 +331,9 @@ describe('withXmlSafeSerialization', () => {
   it('runs the capture without a marker when XMLSerializer is unavailable', async () => {
     const root = document.body;
     delete globals.XMLSerializer;
-    await expect(withXmlSafeSerialization(root, async (style) => style)).resolves.toEqual({});
+    await expect(
+      withCaptureClone(root, removeXmlUnsafeAttributes, async (style) => style)
+    ).resolves.toEqual({});
   });
 
   it('runs the capture unpatched and unmarked when the host page froze the serializer', async () => {
@@ -326,10 +346,14 @@ describe('withXmlSafeSerialization', () => {
     });
 
     try {
-      const style = await withXmlSafeSerialization(document.body, async (captureStyle) => {
-        expect(prototype.serializeToString).toBe(original);
-        return captureStyle;
-      });
+      const style = await withCaptureClone(
+        document.body,
+        removeXmlUnsafeAttributes,
+        async (captureStyle) => {
+          expect(prototype.serializeToString).toBe(original);
+          return captureStyle;
+        }
+      );
       expect(style).toEqual({});
       expect(prototype.serializeToString).toBe(original);
     } finally {
@@ -352,8 +376,10 @@ describe('withXmlSafeSerialization', () => {
     };
 
     const nativeMessage = serializeNull();
-    const wrappedMessage = await withXmlSafeSerialization(document.body, async () =>
-      serializeNull()
+    const wrappedMessage = await withCaptureClone(
+      document.body,
+      removeXmlUnsafeAttributes,
+      async () => serializeNull()
     );
 
     expect(nativeMessage).not.toBe('no error');
@@ -369,7 +395,7 @@ describe('withXmlSafeSerialization', () => {
     document.getElementById('scripted')!.setAttribute('xlink:href', '#dot');
     const root = document.getElementById('icons')!;
 
-    const markup = await withXmlSafeSerialization(root, async (captureStyle) =>
+    const markup = await withCaptureClone(root, removeXmlUnsafeAttributes, async (captureStyle) =>
       new XMLSerializer().serializeToString(
         buildOwnedCaptureSvg(root.cloneNode(true) as HTMLElement, captureStyle)
       )
@@ -387,7 +413,7 @@ describe('withXmlSafeSerialization', () => {
       '<svg xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><g id="layer" inkscape:label="Layer 1"></g></svg>';
     const root = document.getElementById('layer')!;
 
-    const markup = await withXmlSafeSerialization(root, async (captureStyle) =>
+    const markup = await withCaptureClone(root, removeXmlUnsafeAttributes, async (captureStyle) =>
       new XMLSerializer().serializeToString(
         buildOwnedCaptureSvg(root.cloneNode(true) as HTMLElement, captureStyle)
       )
@@ -405,7 +431,9 @@ describe('withXmlSafeSerialization', () => {
 
     const unsafe = decodeSvgDataUrl(await toSvg(frame, options));
     const safe = decodeSvgDataUrl(
-      await withXmlSafeSerialization(frame, (style) => toSvg(frame, { ...options, style }))
+      await withCaptureClone(frame, removeXmlUnsafeAttributes, (style) =>
+        toSvg(frame, { ...options, style })
+      )
     );
 
     expect(hasParserError(unsafe)).toBe(true);
@@ -422,7 +450,9 @@ describe('withXmlSafeSerialization', () => {
 
     const unsafe = decodeSvgDataUrl(await toSvg(target, options));
     const safe = decodeSvgDataUrl(
-      await withXmlSafeSerialization(target, (style) => toSvg(target, { ...options, style }))
+      await withCaptureClone(target, removeXmlUnsafeAttributes, (style) =>
+        toSvg(target, { ...options, style })
+      )
     );
 
     expect(hasParserError(unsafe)).toBe(true);

@@ -1,4 +1,4 @@
-import { ApiTokens } from '../../pages/console/EnterpriseSettings';
+import { ApiTokens } from '../../pages/console/ApiTokens';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,6 +6,7 @@ import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../utils';
 import { SettingsPage } from '../../../pages/console/SettingsPage';
 import { Screenshot } from '../../../pages/widget/Screenshot';
+import { api } from '../../../api/client';
 
 describe('Settings Page', () => {
   beforeEach(() => {
@@ -236,7 +237,13 @@ describe('Settings Page', () => {
 
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab');
-      expect(tabs.length).toBe(4); // General, Storage, SMTP
+      expect(tabs.map((tab) => tab.textContent)).toEqual([
+        'General',
+        'SMTP',
+        'Storage',
+        'API',
+        'Webhooks',
+      ]);
     });
   });
 
@@ -247,5 +254,77 @@ describe('Settings Page', () => {
     await waitFor(() => {
       expect(screen.getByText('Storage Settings')).toBeInTheDocument();
     });
+  });
+
+  it.each([
+    ['Community Edition', { eeAvailable: false, features: {} }],
+    [
+      'unlicensed Enterprise Edition',
+      {
+        eeAvailable: true,
+        features: { 's3-storage': false, 'api-access': false, webhooks: false },
+      },
+    ],
+  ])('keeps licensed tabs visible with upgrade banners in %s', async (_edition, features) => {
+    server.use(http.get('/api/license/features', () => HttpResponse.json(features)));
+    const get = vi.spyOn(api, 'get');
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    for (const name of ['Storage', 'API', 'Webhooks']) {
+      expect(screen.getByRole('tab', { name })).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name }));
+      expect(
+        await screen.findByText('This feature requires an Enterprise license.')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Upgrade to Enterprise' })).toHaveAttribute(
+        'href',
+        'https://bugpin.io/editions/'
+      );
+      expect(screen.queryByRole('button', { name: 'Create token' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add webhook' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Bucket Name')).not.toBeInTheDocument();
+    }
+
+    expect(get).not.toHaveBeenCalledWith('/tokens');
+    expect(get).not.toHaveBeenCalledWith('/webhooks');
+    expect(get).not.toHaveBeenCalledWith('/projects');
+    expect(get).not.toHaveBeenCalledWith('/storage/stats');
+    get.mockRestore();
+  });
+
+  it('opens API tokens and webhooks in separate tabs', async () => {
+    server.use(
+      http.get('/api/tokens', () => HttpResponse.json({ tokens: [] })),
+      http.get('/api/webhooks', () => HttpResponse.json({ webhooks: [] }))
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    expect(screen.queryByRole('tab', { name: 'Enterprise' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'API' }));
+    expect(await screen.findByRole('button', { name: 'Create token' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#api-tokens');
+    expect(screen.queryByLabelText('Webhook name')).not.toBeInTheDocument();
+    expect(screen.queryByText('White-label')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Webhooks' }));
+    expect(await screen.findByRole('button', { name: 'Add webhook' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#webhooks');
+    expect(screen.queryByLabelText('Token name')).not.toBeInTheDocument();
+    expect(screen.queryByText('White-label')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['api-tokens', 'Create token'],
+    ['webhooks', 'Add webhook'],
+  ])('opens the %s tab from its URL hash', async (hash, fieldLabel) => {
+    server.use(
+      http.get('/api/tokens', () => HttpResponse.json({ tokens: [] })),
+      http.get('/api/webhooks', () => HttpResponse.json({ webhooks: [] }))
+    );
+    window.location.hash = hash;
+    renderWithProviders(<SettingsPage />);
+    expect(await screen.findByRole('button', { name: fieldLabel })).toBeInTheDocument();
   });
 });

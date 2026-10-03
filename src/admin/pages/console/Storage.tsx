@@ -508,8 +508,8 @@ function MigrationSection() {
             </div>
             <Progress value={migrationProgress} />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>✅ {progress.successCount} succeeded</span>
-              <span>❌ {progress.failureCount} failed</span>
+              <span>{progress.successCount} succeeded</span>
+              <span>{progress.failureCount} failed</span>
             </div>
           </div>
         )}

@@ -45,3 +45,9 @@ coverage/
 
 # TypeScript build info
 *.tsbuildinfo
+
+!ee/tests/
+!ee/tests/**
+
+!ee/scripts/
+!ee/scripts/**

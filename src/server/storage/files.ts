@@ -559,9 +559,7 @@ export async function saveAvatar(options: SaveAvatarOptions): Promise<SavedFile>
 export function deleteAvatar(userId: string, filename: string): boolean {
   try {
     const filePath = path.join(config.avatarsDir, userId, filename);
-    if (!fs.existsSync(filePath)) {
-      return false;
-    }
+    if (!fs.existsSync(filePath)) return false;
     fs.unlinkSync(filePath);
     logger.info('Avatar deleted', { userId, path: filePath });
     return true;
@@ -608,6 +606,13 @@ export interface FaviconSet {
   androidChrome512: string; // 512x512
   version: string;
 }
+  const stagedPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(stagedPath, processedData);
+    fs.renameSync(stagedPath, filePath);
+  } finally {
+    fs.rmSync(stagedPath, { force: true });
+  }
 
 /**
  * Save branding logo or icon (light or dark mode)
@@ -615,7 +620,7 @@ export interface FaviconSet {
  * Logos are kept at original size (up to 2000px)
  */
 export async function saveBrandingLogo(options: SaveBrandingLogoOptions): Promise<SavedFile> {
-  const { mode, mimeType, data, type = 'logo' } = options;
+  const { mode, data, type = 'logo' } = options;
 
   const modeDir = path.join(config.brandingDir, mode);
 
@@ -627,34 +632,15 @@ export async function saveBrandingLogo(options: SaveBrandingLogoOptions): Promis
   // Import sharp for image processing
   const sharp = (await import('sharp')).default;
 
-  let processedData: Buffer;
-  let finalMimeType = mimeType;
-  let ext = getExtension(mimeType);
+  let image = sharp(Buffer.from(data), { limitInputPixels: 16_000_000 });
+  if (type === 'icon') image = image.resize(256, 256, { fit: 'cover', position: 'center' });
+  const processedData = await image.png().toBuffer();
+  const finalMimeType = 'image/png';
+  const ext = 'png';
 
-  if (type === 'icon') {
-    // Resize icons to 256x256 for optimal sidebar display
-    // Convert to PNG for consistent quality
-    processedData = await sharp(Buffer.from(data))
-      .resize(256, 256, {
-        fit: 'cover',
-        position: 'center',
-      })
-      .png()
-      .toBuffer();
-    finalMimeType = 'image/png';
-    ext = 'png';
-  } else {
-    // For logos, keep original size (no dimension restrictions for email headers etc.)
-    processedData = Buffer.from(data);
-  }
-
-  const filename = `${type}-${mode}.${ext}`;
+  const filename = `${type}-${mode}-${crypto.randomUUID()}.${ext}`;
   const filePath = path.join(modeDir, filename);
 
-  // Save file
-  fs.writeFileSync(filePath, processedData);
-
-  // Get final dimensions
   const finalMetadata = await sharp(processedData).metadata();
 
   logger.info(`Branding ${type} saved`, { mode, filename, size: processedData.length });
@@ -720,64 +706,58 @@ async function generateFaviconSizes(
     fs.mkdirSync(modeDir, { recursive: true });
   }
 
-  const faviconSet: Partial<FaviconSet> = {};
-
-  // Generate Apple Touch Icon (180x180)
-  const appleTouchBuffer = await sharp(sourceBuffer)
-    .resize(180, 180, { fit: 'cover', position: 'center' })
-    .png()
-    .toBuffer();
-  const appleTouchPath = path.join(modeDir, `apple-touch-icon-${mode}.png`);
-  fs.writeFileSync(appleTouchPath, appleTouchBuffer);
-  faviconSet.appleTouchIcon = appleTouchPath;
-
-  // Generate Android Chrome 192x192
-  const android192Buffer = await sharp(sourceBuffer)
-    .resize(192, 192, { fit: 'cover', position: 'center' })
-    .png()
-    .toBuffer();
-  const android192Path = path.join(modeDir, `android-chrome-192x192-${mode}.png`);
-  fs.writeFileSync(android192Path, android192Buffer);
-  faviconSet.androidChrome192 = android192Path;
-
-  // Generate Android Chrome 512x512
-  const android512Buffer = await sharp(sourceBuffer)
-    .resize(512, 512, { fit: 'cover', position: 'center' })
-    .png()
-    .toBuffer();
-  const android512Path = path.join(modeDir, `android-chrome-512x512-${mode}.png`);
-  fs.writeFileSync(android512Path, android512Buffer);
-  faviconSet.androidChrome512 = android512Path;
-
-  // Generate .ico file
-  const icoPath = path.join(modeDir, `favicon-${mode}.ico`);
-  await generateIcoFile(sourceBuffer, icoPath);
-  faviconSet.ico = icoPath;
-
-  // Generate version hash
-  faviconSet.version = Date.now().toString(36);
-
-  return faviconSet as FaviconSet;
-}
-
-/**
- * Generate .ico file with multiple sizes embedded
- */
-async function generateIcoFile(sourceBuffer: Buffer, outputPath: string): Promise<void> {
-  const sharp = (await import('sharp')).default;
-
-  // For .ico generation, we'll create a 32x32 PNG and save as .ico
-  // Note: True multi-size .ico would require ico-endec or similar library
-  // For now, we'll use a single 32x32 image as .ico
-  const icoBuffer = await sharp(sourceBuffer)
-    .resize(32, 32, {
-      fit: 'cover',
-      position: 'center',
-    })
-    .png()
-    .toBuffer();
-
-  fs.writeFileSync(outputPath, icoBuffer);
+  const version = crypto.randomUUID();
+  const finalDir = path.join(modeDir, `favicons-${version}`);
+  const stagedDir = `${finalDir}.tmp`;
+  fs.mkdirSync(stagedDir);
+  try {
+    const sizes = [180, 192, 512, 32];
+    const images = await Promise.all(
+      sizes.map((size) =>
+        sharp(sourceBuffer, { limitInputPixels: 16_000_000 })
+          .resize(size, size, { fit: 'cover', position: 'center' })
+          .png()
+          .toBuffer()
+      )
+    );
+    const names = [
+      `apple-touch-icon-${mode}.png`,
+      `android-chrome-192x192-${mode}.png`,
+      `android-chrome-512x512-${mode}.png`,
+      `favicon-${mode}.ico`,
+    ];
+    const header = Buffer.alloc(22);
+    header.writeUInt16LE(1, 2);
+    header.writeUInt16LE(1, 4);
+    header[6] = 32;
+    header[7] = 32;
+    header.writeUInt16LE(1, 10);
+    header.writeUInt16LE(32, 12);
+    header.writeUInt32LE(images[3].length, 14);
+    header.writeUInt32LE(22, 18);
+    images[3] = Buffer.concat([header, images[3]]);
+  for (const name of fs.readdirSync(modeDir)) {
+    if (
+      (type === 'favicon' && name.startsWith('favicons-')) ||
+      (type !== 'favicon' && name.startsWith(`${type}-${mode}-`))
+    ) {
+      fs.rmSync(path.join(modeDir, name), { recursive: true, force: true });
+      deleted = true;
+    }
+  }
+    for (let index = 0; index < names.length; index++)
+      fs.writeFileSync(path.join(stagedDir, names[index]), images[index]);
+    fs.renameSync(stagedDir, finalDir);
+    return {
+      appleTouchIcon: path.join(finalDir, names[0]),
+      androidChrome192: path.join(finalDir, names[1]),
+      androidChrome512: path.join(finalDir, names[2]),
+      ico: path.join(finalDir, names[3]),
+      version,
+    };
+  } finally {
+    fs.rmSync(stagedDir, { recursive: true, force: true });
+  }
 }
 
 /**

@@ -456,6 +456,7 @@ export const App: FunctionComponent<AppProps> = ({ config, deps }) => {
 
       {step === 'form' && (
         <WidgetDialogComponent
+          hidePoweredBy={config.hidePoweredBy}
           onClose={handleRequestClose}
           onSubmit={handleSubmit}
           onCaptureScreenshot={handleCaptureScreenshot}

@@ -74,7 +74,10 @@ export interface AdminBrandingService {
   uploadIcon(mode: 'light' | 'dark', file: BrandingFileData): Promise<Result<string>>;
   updatePrimaryColor(color: string): Promise<Result<void>>;
   updateAdminThemeColors(colors: Record<string, string>): Promise<Result<void>>;
-  resetToDefaults(type?: 'logo' | 'icon' | 'favicon' | 'color'): Promise<Result<void>>;
+  resetToDefaults(
+    type?: 'logo' | 'icon' | 'favicon' | 'color',
+    mode?: 'light' | 'dark'
+  ): Promise<Result<void>>;
 }
 
 export interface BrandingFileData {

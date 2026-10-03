@@ -236,7 +236,7 @@ describe('Settings Page', () => {
 
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab');
-      expect(tabs.length).toBe(3); // General, Storage, SMTP
+      expect(tabs.length).toBe(4); // General, Storage, SMTP
     });
   });
 

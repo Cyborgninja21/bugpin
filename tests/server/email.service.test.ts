@@ -1,3 +1,4 @@
+import { defaultEmailTemplates } from '../../src/server/constants/email-templates';
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { emailService, resolveTemplate } from '../../src/server/services/email.service';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
@@ -132,7 +133,7 @@ describe('emailService.sendTestEmail', () => {
   it('rejects missing host and from fields', async () => {
     const result = await emailService.sendTestEmail(
       { host: '', port: 587, from: '' },
-      'recipient@example.com',
+      'recipient@example.com'
     );
     expect(result.success).toBe(false);
   });
@@ -144,7 +145,7 @@ describe('emailService.sendTestEmail', () => {
 
     const result = await emailService.sendTestEmail(
       { host: 'smtp.example.com', port: 587, from: 'no-reply@example.com' },
-      'recipient@example.com',
+      'recipient@example.com'
     );
     expect(result.success).toBe(false);
   });
@@ -153,7 +154,7 @@ describe('emailService.sendTestEmail', () => {
     const result = await emailService.sendTestEmail(
       { host: 'smtp.example.com', port: 587, from: 'no-reply@example.com' },
       'recipient@example.com',
-      'BugPin',
+      'BugPin'
     );
     expect(result.success).toBe(true);
     expect(verify).toHaveBeenCalled();
@@ -249,14 +250,14 @@ describe('resolveTemplate', () => {
     expect(result.subject).toBe('Custom DE');
   });
 
-  it('falls back to en within custom overrides before falling through to defaults', () => {
+  it('preserves built-in translations when only English is overridden', () => {
     const overrides: CustomEmailTemplates = {
       reporterConfirmation: {
         en: { subject: 'Custom EN override', html: '<p>en</p>' },
       },
     };
     const result = resolveTemplate('reporterConfirmation', 'fr', overrides);
-    expect(result.subject).toBe('Custom EN override');
+    expect(result.subject).toBe(defaultEmailTemplates.reporterConfirmation.fr.subject);
   });
 
   it('falls through to defaults when override has neither requested locale nor en', () => {

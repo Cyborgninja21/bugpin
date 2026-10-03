@@ -85,9 +85,12 @@ describe('EmailTemplates', () => {
           data: { settings: { smtpEnabled, emailTemplates: {} } },
         } as never);
       }
-      if (path.startsWith('/templates/') && path.endsWith('/default')) {
+      if (path.startsWith('/templates/') && path.endsWith('/defaults')) {
         return Promise.resolve({
-          data: { success: true, template: { subject: 'Default subject', html: '<p>def</p>' } },
+          data: {
+            success: true,
+            templates: { en: { subject: 'Default subject', html: '<p>def</p>' } },
+          },
         } as never);
       }
       return Promise.reject(new Error(`Unexpected GET ${path}`));
@@ -106,7 +109,7 @@ describe('EmailTemplates', () => {
     return { calls, putSpy, deleteSpy };
   }
 
-  it('renders locale tabs and shows the empty-state hint for non-en tabs', async () => {
+  it('renders locale tabs and preloads built-in templates', async () => {
     mockApi();
     renderWithProviders(<EmailTemplates />);
 
@@ -118,7 +121,7 @@ describe('EmailTemplates', () => {
     await user.click(screen.getByRole('tab', { name: /Deutsch/ }));
 
     await waitFor(() => {
-      expect(screen.getByText(/No override for Deutsch/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Subject Line/i)).toHaveValue('Default subject');
     });
   });
 
@@ -131,6 +134,7 @@ describe('EmailTemplates', () => {
 
     await user.click(screen.getByRole('tab', { name: /Deutsch/ }));
     const subjectField = await screen.findByLabelText(/Subject Line/i);
+    await user.clear(subjectField);
     await user.type(subjectField, 'DE Subject');
     const bodyField = screen.getByLabelText(/Email Body/i);
     await user.type(bodyField, '<p>de body</p>');
@@ -142,7 +146,7 @@ describe('EmailTemplates', () => {
     expect(screen.getByLabelText(/Subject Line/i)).toHaveValue('DE Subject');
   });
 
-  it('saves filled locale tabs and deletes overrides cleared in the editor', async () => {
+  it('saves changed locales and resets overrides in one atomic request', async () => {
     const { calls } = mockApi({
       overrides: {
         newReport: {
@@ -157,15 +161,15 @@ describe('EmailTemplates', () => {
     await screen.findByRole('tab', { name: /English/ });
     await user.click(screen.getByRole('tab', { name: /Deutsch/ }));
 
-    const subjectField = await screen.findByLabelText(/Subject Line/i);
-    await user.clear(subjectField);
-    const bodyField = screen.getByLabelText(/Email Body/i);
-    await user.clear(bodyField);
+    await screen.findByLabelText(/Subject Line/i);
+    await user.click(screen.getByRole('button', { name: /Reset .* to Default/i }));
 
     await user.click(screen.getByRole('tab', { name: /Français/ }));
     const frSubject = await screen.findByLabelText(/Subject Line/i);
+    await user.clear(frSubject);
     await user.type(frSubject, 'FR Subject');
     const frBody = screen.getByLabelText(/Email Body/i);
+    await user.clear(frBody);
     await user.type(frBody, '<p>fr body</p>');
 
     await user.click(screen.getByRole('button', { name: /Save Template/i }));
@@ -177,15 +181,18 @@ describe('EmailTemplates', () => {
     const putCalls = calls.filter((c) => c.method === 'PUT');
     const deleteCalls = calls.filter((c) => c.method === 'DELETE');
 
-    expect(putCalls).toContainEqual(
-      expect.objectContaining({
-        path: '/templates/newReport/fr',
-        body: { subject: 'FR Subject', html: '<p>fr body</p>' },
-      })
-    );
-
-    expect(deleteCalls).toContainEqual(
-      expect.objectContaining({ path: '/templates/newReport/de' })
-    );
+    expect(putCalls).toEqual([
+      {
+        method: 'PUT',
+        path: '/templates/newReport/locales',
+        body: {
+          templates: {
+            de: null,
+            fr: { subject: 'FR Subject', html: '<p>fr body</p>' },
+          },
+        },
+      },
+    ]);
+    expect(deleteCalls).toHaveLength(0);
   });
 });

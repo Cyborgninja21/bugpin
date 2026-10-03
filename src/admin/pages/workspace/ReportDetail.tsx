@@ -78,7 +78,7 @@ export function ReportDetail() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const canEdit = user?.role === 'admin' || user?.role === 'editor';
+  const mayEdit = user?.role === 'admin' || user?.role === 'editor';
 
   const [detailsOpen, setDetailsOpen] = usePersistedOpenState(
     'bugpin.report-detail.details-open',
@@ -117,6 +117,8 @@ export function ReportDetail() {
     },
     enabled: !!id,
   });
+
+  const canEdit = mayEdit && !data?.report?.licenseLocked;
 
   // Load integrations for this report's project
   const { data: integrations } = useIntegrations(data?.report?.projectId);
@@ -392,6 +394,12 @@ export function ReportDetail() {
 
   return (
     <div className="space-y-6">
+      {report.licenseLocked && (
+        <p role="status" className="rounded-md border p-3 text-sm text-muted-foreground">
+          This project is read-only because it is not covered by the current license. Its reports
+          and files remain available.
+        </p>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -1352,7 +1360,7 @@ export function ReportDetail() {
                         {report.githubSyncError}
                       </p>
                     )}
-                    {isAdmin && (
+                    {canEdit && isAdmin && (
                       <Button
                         size="sm"
                         variant="outline"

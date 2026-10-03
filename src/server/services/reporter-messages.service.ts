@@ -1,6 +1,7 @@
 import { reporterMessagesRepo } from '../database/repositories/reporter-messages.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { notificationsService } from './notifications.service.js';
+import { checkProjectLicense } from '../utils/project-license.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type { ReporterMessage } from '@shared/types';
@@ -19,6 +20,9 @@ export const reporterMessagesService = {
     if (!report) {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(report.projectId);
+    if (!access.success) return access;
 
     if (!report.reporterEmail) {
       return Result.fail('Report does not have a reporter email address', 'NO_REPORTER_EMAIL');

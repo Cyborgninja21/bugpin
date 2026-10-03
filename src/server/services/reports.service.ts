@@ -5,6 +5,7 @@ import { saveFile, deleteReportFiles, readFile, validateFile } from '../storage/
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
+import { checkProjectLicense } from '../utils/project-license.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import { notificationsService } from './notifications.service.js';
 import { githubSyncService } from './integrations/github-sync.service.js';
@@ -240,6 +241,9 @@ async function createForProject(
     createdByUserId?: string | null;
   }
 ): Promise<Result<Report>> {
+  const access = checkProjectLicense(project.id);
+  if (!access.success) return access;
+
   if (!input.title || input.title.trim().length < 4) {
     return Result.fail('Title must be at least 4 characters', 'INVALID_TITLE');
   }
@@ -468,7 +472,10 @@ export const reportsService = {
 
     const files = await filesRepo.findByReportId(id);
 
-    return Result.ok({ report, files });
+    return Result.ok({
+      report: { ...report, licenseLocked: !checkProjectLicense(report.projectId).success },
+      files,
+    });
   },
 
   /**
@@ -481,7 +488,10 @@ export const reportsService = {
     const limit = filter.limit ?? 20;
 
     return Result.ok({
-      data: result.data,
+      data: result.data.map((report) => ({
+        ...report,
+        licenseLocked: !checkProjectLicense(report.projectId).success,
+      })),
       total: result.total,
       page,
       limit,
@@ -498,6 +508,9 @@ export const reportsService = {
     if (!existing) {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(existing.projectId);
+    if (!access.success) return access;
 
     // Validate title if provided
     if (input.title !== undefined) {
@@ -700,6 +713,9 @@ export const reportsService = {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
 
+    const access = checkProjectLicense(existing.projectId);
+    if (!access.success) return access;
+
     // Trigger webhooks via EE hooks before deletion (async, don't block)
     getEEHooks()
       .onReportDeleted(existing)
@@ -739,6 +755,13 @@ export const reportsService = {
 
     if (ids.length > 100) {
       return Result.fail('Cannot update more than 100 reports at once', 'TOO_MANY_IDS');
+    }
+
+    for (const id of ids) {
+      const report = await reportsRepo.findById(id);
+      if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+      const access = checkProjectLicense(report.projectId);
+      if (!access.success) return access;
     }
 
     if (updates.assignedTo !== undefined) {
@@ -783,6 +806,9 @@ export const reportsService = {
     if (!report) {
       return Result.fail('Report not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(report.projectId);
+    if (!access.success) return access;
 
     // Validate file before saving
     const settings = await settingsCacheService.getAll();

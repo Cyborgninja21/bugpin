@@ -3,6 +3,7 @@ import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { webhooksRepo } from '../database/repositories/webhooks.repo.js';
 import { usersService } from './users.service.js';
 import { Result } from '../utils/result.js';
+import { checkProjectLicense, ProjectLicenseError } from '../utils/project-license.js';
 import { logger } from '../utils/logger.js';
 import type { Project, ProjectSettings } from '@shared/types';
 
@@ -40,7 +41,13 @@ export const projectsService = {
       settings: input.settings ?? {},
     };
 
-    const project = await projectsRepo.create(projectData);
+    let project: Project;
+    try {
+      project = await projectsRepo.create(projectData);
+    } catch (error) {
+      if (error instanceof ProjectLicenseError) return Result.fail(error.message, error.code);
+      throw error;
+    }
 
     logger.info('Project created', { projectId: project.id, name: project.name });
     return Result.ok(project);
@@ -56,7 +63,7 @@ export const projectsService = {
       return Result.fail('Project not found', 'NOT_FOUND');
     }
 
-    return Result.ok(project);
+    return Result.ok({ ...project, licenseLocked: !checkProjectLicense(project.id).success });
   },
 
   /**
@@ -77,7 +84,12 @@ export const projectsService = {
    */
   async list(): Promise<Result<Project[]>> {
     const projects = await projectsRepo.findAll();
-    return Result.ok(projects);
+    return Result.ok(
+      projects.map((project) => ({
+        ...project,
+        licenseLocked: !checkProjectLicense(project.id).success,
+      }))
+    );
   },
 
   /**
@@ -89,6 +101,9 @@ export const projectsService = {
     if (!existing) {
       return Result.fail('Project not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(id);
+    if (!access.success) return access;
 
     // Validate name if provided
     if (input.name !== undefined) {
@@ -162,6 +177,8 @@ export const projectsService = {
    * Regenerate API key for a project
    */
   async regenerateApiKey(id: string): Promise<Result<Project>> {
+    const access = checkProjectLicense(id);
+    if (!access.success) return access;
     const existing = await projectsRepo.findById(id);
 
     if (!existing) {
@@ -246,6 +263,9 @@ export const projectsService = {
     if (!project) {
       return Result.fail('Invalid API key', 'INVALID_API_KEY');
     }
+
+    const access = checkProjectLicense(project.id);
+    if (!access.success) return access;
 
     if (!project.isActive) {
       return Result.fail('Project is not active', 'PROJECT_INACTIVE');

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../mocks/server';
 import { renderWithProviders } from '../../utils';
+import { licenseApi } from '../../../api/license';
 import { Projects } from '../../../pages/workspace/Projects';
 
 vi.mock('sonner', () => ({
@@ -19,6 +20,7 @@ import { toast } from 'sonner';
 let writeTextMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({ eeAvailable: false, licensed: false });
   writeTextMock = vi.fn().mockResolvedValue(undefined);
   // Mock clipboard API on navigator
   Object.defineProperty(navigator, 'clipboard', {
@@ -32,6 +34,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -234,4 +237,39 @@ describe('Projects Page', () => {
     expect(within(deleteDialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
     expect(within(deleteDialog).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
+});
+
+it('blocks project creation at the purchased allowance and marks excess projects read-only', async () => {
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
+    eeAvailable: true,
+    licensed: true,
+    projectLimit: 1,
+    usedProjects: 1,
+    licensedProjectIds: ['proj_licensed'],
+    selectionRequired: false,
+  });
+  server.use(
+    http.get('/api/projects', () =>
+      HttpResponse.json({
+        success: true,
+        projects: [
+          {
+            id: 'proj_locked',
+            name: 'Locked Project',
+            apiKey: 'key',
+            reportsCount: 1,
+            isActive: true,
+            position: 0,
+            licenseLocked: true,
+          },
+        ],
+      })
+    )
+  );
+  renderWithProviders(<Projects />);
+  expect(await screen.findByText('Read-only · License limit')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Create Project' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Settings' })).toBeDisabled();
+  expect(screen.getByRole('link', { name: '1 reports' })).toBeInTheDocument();
 });

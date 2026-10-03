@@ -1,3 +1,4 @@
+import { useBranding } from '../contexts/BrandingContext';
 import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { AboutDialog } from './AboutDialog';
@@ -6,13 +7,26 @@ const GITHUB_URL = 'https://github.com/aranticlabs/bugpin';
 
 export function Footer() {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const { config } = useBranding();
+  const whiteLabel = config?.whiteLabel;
+  if (whiteLabel?.enabled && whiteLabel.hideFooterBranding) {
+    return whiteLabel.customCopyright ? (
+      <footer className="border-t py-2 px-4 text-center text-xs text-muted-foreground">
+        {whiteLabel.customCopyright}
+      </footer>
+    ) : null;
+  }
   const currentYear = new Date().getFullYear();
 
   return (
     <>
       <footer className="border-t py-2 px-4 text-center text-xs text-muted-foreground">
         <div className="flex items-center justify-center gap-1">
-          <span>© {currentYear} Arantic Digital</span>
+          <span>
+            {whiteLabel?.enabled && whiteLabel.customCopyright
+              ? whiteLabel.customCopyright
+              : `© ${currentYear} Arantic Digital`}
+          </span>
           <span>|</span>
           <a
             href="#"

@@ -8,6 +8,7 @@ export interface WidgetLanguageConfig {
 }
 
 export interface WidgetConfig {
+  hidePoweredBy?: boolean;
   apiKey: string;
   serverUrl: string;
   reporterName?: string;

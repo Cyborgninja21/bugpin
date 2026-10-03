@@ -73,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('Widget settings pages', () => {
@@ -82,6 +83,7 @@ describe('Widget settings pages', () => {
     renderWithQuery(<Dialog />);
 
     expect(await screen.findByText('Widget Dialog Settings')).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Show BugPin branding' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /change widget colors/i }));
     await user.click(screen.getByRole('button', { name: /save colors/i }));
@@ -133,4 +135,46 @@ describe('Widget settings pages', () => {
     // Verify it did NOT trigger a save
     expect(putSpy).not.toHaveBeenCalled();
   });
+});
+
+it('shows branding by default for a white-label license and persists both toggle choices', async () => {
+  const config = await brandingApiMocks.getConfig();
+  let hidePoweredBy = false;
+  brandingApiMocks.getConfig.mockImplementation(async () => ({
+    ...config,
+    whiteLabel: { enabled: true, hidePoweredBy },
+  }));
+  const put = vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {
+    hidePoweredBy = (body as { hidePoweredBy: boolean }).hidePoweredBy;
+    return { data: { success: true } };
+  });
+  const user = userEvent.setup();
+  const first = renderWithQuery(<Dialog />);
+  const toggle = await screen.findByRole('switch', { name: 'Show BugPin branding' });
+  expect(toggle).toBeChecked();
+  await user.click(toggle);
+  await waitFor(() => expect(toggle).not.toBeChecked());
+  expect(put).toHaveBeenLastCalledWith('/white-label/config', { hidePoweredBy: true });
+  first.unmount();
+  renderWithQuery(<Dialog />);
+  const restored = await screen.findByRole('switch', { name: 'Show BugPin branding' });
+  expect(restored).not.toBeChecked();
+  await user.click(restored);
+  await waitFor(() => expect(restored).toBeChecked());
+  expect(put).toHaveBeenLastCalledWith('/white-label/config', { hidePoweredBy: false });
+});
+
+it('keeps the saved branding choice when updating it fails', async () => {
+  const config = await brandingApiMocks.getConfig();
+  brandingApiMocks.getConfig.mockResolvedValue({
+    ...config,
+    whiteLabel: { enabled: true, hidePoweredBy: false },
+  });
+  vi.spyOn(api, 'put').mockRejectedValue(new Error('License unavailable'));
+  const user = userEvent.setup();
+  renderWithQuery(<Dialog />);
+  const toggle = await screen.findByRole('switch', { name: 'Show BugPin branding' });
+  await user.click(toggle);
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update widget branding'));
+  expect(toggle).toBeChecked();
 });

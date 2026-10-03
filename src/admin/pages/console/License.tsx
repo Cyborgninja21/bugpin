@@ -11,10 +11,13 @@ import {
 } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Label } from '../../components/ui/label';
+import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { Spinner } from '../../components/ui/spinner';
-import { Crown, Check, ExternalLink, Trash2 } from 'lucide-react';
+import { Checkbox } from '../../components/ui/checkbox';
+import { api } from '../../api/client';
+import { Crown, Check, ExternalLink, Trash2, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +33,27 @@ import {
 export function License() {
   const queryClient = useQueryClient();
   const [licenseKey, setLicenseKey] = useState('');
+  const [removeConfirmation, setRemoveConfirmation] = useState('');
+  const [activationSelection, setActivationSelection] = useState<{
+    projectLimit: number;
+    projects: { id: string; name: string }[];
+  } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
+
+  const invalidateLicense = () => {
+    for (const key of [
+      'license-status',
+      'license-features',
+      'branding-config',
+      'projects',
+      'project',
+      'reports',
+      'report',
+      'license-projects',
+    ]) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  };
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['license-status'],
@@ -37,15 +61,41 @@ export function License() {
   });
 
   const activateMutation = useMutation({
-    mutationFn: licenseApi.activate,
+    mutationFn: ({ key, projectIds }: { key: string; projectIds?: string[] }) =>
+      licenseApi.activate(key, projectIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['license-status'] });
       queryClient.invalidateQueries({ queryKey: ['license-features'] });
+      queryClient.invalidateQueries({ queryKey: ['branding-config'] });
       toast.success('License activated successfully');
       setLicenseKey('');
+      setActivationSelection(null);
+      setSelectedIds(null);
+      invalidateLicense();
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to activate license');
+    onError: (
+      err: Error & {
+        response?: {
+          data?: {
+            message?: string;
+            error?: string;
+            projectLimit?: number;
+            projects?: { id: string; name: string }[];
+          };
+        };
+      }
+    ) => {
+      const details = err.response?.data;
+      if (
+        details?.error === 'PROJECT_SELECTION_REQUIRED' &&
+        typeof details.projectLimit === 'number' &&
+        details.projects
+      ) {
+        setActivationSelection({ projectLimit: details.projectLimit, projects: details.projects });
+        setSelectedIds([]);
+        return;
+      }
+      toast.error(details?.message || 'Failed to activate license');
     },
   });
 
@@ -54,10 +104,53 @@ export function License() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['license-status'] });
       queryClient.invalidateQueries({ queryKey: ['license-features'] });
+      queryClient.invalidateQueries({ queryKey: ['branding-config'] });
+      invalidateLicense();
+      setSelectedIds(null);
       toast.success('License removed');
     },
     onError: () => {
       toast.error('Failed to remove license');
+    },
+  });
+
+  const {
+    data: projects = [],
+    isLoading: loadingProjects,
+    isError: projectsError,
+  } = useQuery({
+    queryKey: ['license-projects'],
+    queryFn: async () => {
+      const response = await api.get('/projects');
+      return response.data.projects as { id: string; name: string }[];
+    },
+    enabled: status?.licensed === true && typeof status.projectLimit === 'number',
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: licenseApi.sync,
+    onSuccess: () => {
+      invalidateLicense();
+      setSelectedIds(null);
+      toast.success('License synced');
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      toast.error(
+        err.response?.data?.message ||
+          'Could not sync license. Your installed license is unchanged.'
+      );
+    },
+  });
+
+  const selectionMutation = useMutation({
+    mutationFn: licenseApi.selectProjects,
+    onSuccess: () => {
+      invalidateLicense();
+      setSelectedIds(null);
+      toast.success('Licensed projects updated');
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'Could not update licensed projects');
     },
   });
 
@@ -67,7 +160,10 @@ export function License() {
       toast.error('Please enter a license key');
       return;
     }
-    activateMutation.mutate(licenseKey.trim());
+    activateMutation.mutate({
+      key: licenseKey.trim(),
+      projectIds: activationSelection ? (selectedIds ?? []) : undefined,
+    });
   };
 
   if (isLoading) {
@@ -111,7 +207,6 @@ export function License() {
                   <Check className="h-3 w-3 mr-1" />
                   Licensed
                 </Badge>
-                <Badge variant="outline">{status?.plan}</Badge>
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -152,6 +247,67 @@ export function License() {
                 </div>
               </div>
 
+              {typeof status?.projectLimit === 'number' && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">Licensed projects</p>
+                      <p className="text-sm text-muted-foreground">
+                        {status.usedProjects ?? 0} of {status.projectLimit} projects used
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => syncMutation.mutate()}
+                      disabled={syncMutation.isPending || selectionMutation.isPending}
+                    >
+                      {syncMutation.isPending ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      Sync license
+                    </Button>
+                  </div>
+                  {status.selectionRequired && (
+                    <p role="alert" className="text-sm text-destructive">
+                      Your project selection exceeds your allowance. Choose the projects to keep
+                      available.
+                    </p>
+                  )}
+                  {loadingProjects ? (
+                    <Spinner size="sm" />
+                  ) : projectsError ? (
+                    <p role="alert">
+                      Could not load projects. Please reload before changing your selection.
+                    </p>
+                  ) : (
+                    <>
+                      <ProjectSelection
+                        projects={projects}
+                        limit={status.projectLimit}
+                        selectedIds={selectedIds ?? status.licensedProjectIds ?? []}
+                        onChange={setSelectedIds}
+                        disabled={selectionMutation.isPending || syncMutation.isPending}
+                      />
+                      <Button
+                        onClick={() =>
+                          selectionMutation.mutate(selectedIds ?? status.licensedProjectIds ?? [])
+                        }
+                        disabled={
+                          selectedIds === null ||
+                          selectionMutation.isPending ||
+                          syncMutation.isPending
+                        }
+                      >
+                        {selectionMutation.isPending && <Spinner size="sm" />}
+                        Save project selection
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Licensed Features */}
               {status?.features && status.features.length > 0 && (
                 <div>
@@ -168,9 +324,9 @@ export function License() {
 
               {/* Remove License */}
               <div className="pt-4 border-t">
-                <AlertDialog>
+                <AlertDialog onOpenChange={(open) => !open && setRemoveConfirmation('')}>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm">
+                    <Button variant="destructive" size="sm" disabled={removeMutation.isPending}>
                       <Trash2 className="h-4 w-4 mr-2" />
                       Remove License
                     </Button>
@@ -183,10 +339,35 @@ export function License() {
                         until you enter a new license key.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
+                    <div className="py-4">
+                      <Label
+                        htmlFor="remove-license-confirmation"
+                        className="text-sm text-muted-foreground"
+                      >
+                        Type{' '}
+                        <span className="font-mono font-semibold text-foreground">license</span> to
+                        confirm
+                      </Label>
+                      <Input
+                        id="remove-license-confirmation"
+                        placeholder="license"
+                        value={removeConfirmation}
+                        onChange={(event) => setRemoveConfirmation(event.target.value)}
+                        className="mt-2 font-mono"
+                        autoComplete="off"
+                        spellCheck={false}
+                        autoCapitalize="none"
+                      />
+                    </div>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => removeMutation.mutate()}
+                        disabled={removeConfirmation !== 'license' || removeMutation.isPending}
+                        onClick={() => {
+                          if (removeConfirmation === 'license' && !removeMutation.isPending) {
+                            removeMutation.mutate();
+                          }
+                        }}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         Remove
@@ -198,13 +379,42 @@ export function License() {
             </div>
           ) : (
             <form onSubmit={handleActivate} className="space-y-4">
+              {activationSelection && (
+                <div className="space-y-3">
+                  <p className="font-medium">
+                    Choose up to {activationSelection.projectLimit} projects to keep available
+                  </p>
+                  <ProjectSelection
+                    projects={activationSelection.projects}
+                    limit={activationSelection.projectLimit}
+                    selectedIds={selectedIds ?? []}
+                    onChange={setSelectedIds}
+                    disabled={activateMutation.isPending}
+                  />
+                </div>
+              )}
+              {status?.message === 'License expired' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => syncMutation.mutate()}
+                  disabled={syncMutation.isPending || activateMutation.isPending}
+                >
+                  {syncMutation.isPending && <Spinner size="sm" />}
+                  Sync installed license
+                </Button>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="license-key">License Key</Label>
                 <Textarea
                   id="license-key"
                   placeholder="Paste your license key here..."
                   value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
+                  onChange={(e) => {
+                    setLicenseKey(e.target.value);
+                    setActivationSelection(null);
+                    setSelectedIds(null);
+                  }}
                   rows={4}
                   className="font-mono text-sm"
                 />
@@ -229,5 +439,49 @@ export function License() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ProjectSelection({
+  projects,
+  limit,
+  selectedIds,
+  onChange,
+  disabled,
+}: {
+  projects: { id: string; name: string }[];
+  limit: number;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  disabled: boolean;
+}) {
+  return (
+    <fieldset disabled={disabled} className="space-y-3">
+      <legend className="sr-only">Select licensed projects</legend>
+      <p className="text-sm text-muted-foreground">
+        Unselected projects remain read-only. Their reports and files are preserved. Pausing a
+        selected project does not release its license slot.
+      </p>
+      {projects.map((project) => {
+        const checked = selectedIds.includes(project.id);
+        return (
+          <div key={project.id} className="flex items-center gap-2">
+            <Checkbox
+              id={`licensed-${project.id}`}
+              checked={checked}
+              disabled={disabled || (!checked && selectedIds.length >= limit)}
+              onCheckedChange={(value) =>
+                onChange(
+                  value === true
+                    ? [...selectedIds, project.id]
+                    : selectedIds.filter((id) => id !== project.id)
+                )
+              }
+            />
+            <Label htmlFor={`licensed-${project.id}`}>{project.name}</Label>
+          </div>
+        );
+      })}
+    </fieldset>
   );
 }

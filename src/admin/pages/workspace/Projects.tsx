@@ -67,6 +67,7 @@ import {
 import { Spinner } from '../../components/ui/spinner';
 import { generateApiKeyPdf } from '../../lib/generate-api-key-pdf';
 import { useBranding } from '../../contexts/BrandingContext';
+import { licenseApi } from '../../api/license';
 import { ProjectSettingsDialog } from '../../components/project/ProjectSettingsDialog';
 import { ProjectIntegrationsDialog } from '../../components/project/ProjectIntegrationsDialog';
 import type { ProjectSettings } from '@shared/types';
@@ -77,6 +78,7 @@ interface Project {
   apiKey: string;
   reportsCount: number;
   isActive: boolean;
+  licenseLocked?: boolean;
   position: number;
   settings?: ProjectSettings;
 }
@@ -145,6 +147,16 @@ export function Projects() {
     staleTime: 0, // Always refetch when navigating to this page
   });
 
+  const { data: licenseStatus } = useQuery({
+    queryKey: ['license-status'],
+    queryFn: licenseApi.getStatus,
+  });
+  const capacityUsed =
+    licenseStatus?.licensed &&
+    typeof licenseStatus.projectLimit === 'number' &&
+    (licenseStatus.selectionRequired ||
+      (licenseStatus.usedProjects ?? 0) >= licenseStatus.projectLimit);
+
   const createMutation = useMutation({
     mutationFn: async (data: { name: string }) => {
       const response = await api.post('/projects', data);
@@ -159,6 +171,8 @@ export function Projects() {
         return next;
       });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['license-status'] });
+      queryClient.invalidateQueries({ queryKey: ['license-projects'] });
       setShowCreateModal(false);
       setNewApiKeyData({ apiKey: data.project.apiKey, projectName: data.project.name });
       toast.success('Project created successfully');
@@ -190,6 +204,8 @@ export function Projects() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['license-status'] });
+      queryClient.invalidateQueries({ queryKey: ['license-projects'] });
       setDeleteProject(null);
       toast.success('Project deleted successfully');
     },
@@ -247,10 +263,23 @@ export function Projects() {
           <h1 className="text-2xl font-bold">Projects</h1>
           <p className="text-muted-foreground">Manage your projects and API keys</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} className="sm:shrink-0">
+        <Button
+          onClick={() => setShowCreateModal(true)}
+          disabled={Boolean(capacityUsed)}
+          className="sm:shrink-0"
+        >
           Create Project
         </Button>
       </div>
+
+      {licenseStatus?.licensed && typeof licenseStatus.projectLimit === 'number' && (
+        <p className="text-sm text-muted-foreground">
+          {licenseStatus.usedProjects ?? 0} of {licenseStatus.projectLimit} licensed projects used.{' '}
+          <Link to="/license" className="text-primary underline">
+            Manage projects or sync your license
+          </Link>
+        </p>
+      )}
 
       {/* Projects list */}
       <div className="space-y-4">
@@ -489,7 +518,11 @@ function SortableProjectCard({
                         : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
                     }`}
                   >
-                    {project.isActive ? 'Active' : 'Paused'}
+                    {project.licenseLocked
+                      ? 'Read-only · License limit'
+                      : project.isActive
+                        ? 'Active'
+                        : 'Paused'}
                   </span>
                 </div>
                 {project.reportsCount > 0 ? (
@@ -511,7 +544,7 @@ function SortableProjectCard({
               variant={project.isActive ? 'outline' : 'default'}
               size="sm"
               onClick={onToggleActive}
-              disabled={isToggling}
+              disabled={isToggling || project.licenseLocked}
               title={project.isActive ? 'Pause project' : 'Activate project'}
             >
               {isToggling ? <Spinner size="sm" /> : <Power className="h-4 w-4" />}
@@ -521,6 +554,7 @@ function SortableProjectCard({
               variant="outline"
               size="sm"
               onClick={onConfigureSettings}
+              disabled={project.licenseLocked}
               title="Project Settings"
             >
               <Settings className="h-4 w-4" />
@@ -530,12 +564,19 @@ function SortableProjectCard({
               variant="outline"
               size="sm"
               onClick={onConfigureIntegrations}
+              disabled={project.licenseLocked}
               title="Integrations"
             >
               <Plug className="h-4 w-4" />
               <span className="hidden sm:inline">Integrations</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={onRegenerateKey} title="Regenerate Key">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRegenerateKey}
+              disabled={project.licenseLocked}
+              title="Regenerate Key"
+            >
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Regenerate Key</span>
             </Button>

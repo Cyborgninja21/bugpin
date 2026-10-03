@@ -5,8 +5,11 @@ import {
   isEEAvailable,
   hasEEFeature,
   getEELicenseService,
+  getEEProjectLicenseService,
+  syncEELicense,
 } from '../../utils/ee.js';
 import type { EEFeature } from '../../types/ee-plugin.js';
+import { projectsService } from '../../services/projects.service.js';
 import { settingsRepo } from '../../database/repositories/settings.repo.js';
 
 const app = new Hono();
@@ -94,7 +97,7 @@ app.post('/activate', authMiddleware, authorize(['admin']), async (c) => {
       );
     }
 
-    const result = await licenseService.validateAndStore(licenseKey);
+    const result = licenseService.validate(licenseKey);
 
     if (!result.valid) {
       return c.json(
@@ -107,10 +110,32 @@ app.post('/activate', authMiddleware, authorize(['admin']), async (c) => {
       );
     }
 
-    // Persist the license key to the database so it survives container restarts
-    await settingsRepo.set('ee:license_key', licenseKey);
-
-    return c.json({ success: true, license: result.license });
+    const projects = getEEProjectLicenseService();
+    if (!projects) {
+      return c.json(
+        {
+          success: false,
+          error: 'EE_UPDATE_REQUIRED',
+          message: 'Update Enterprise Edition to activate this license',
+        },
+        400
+      );
+    }
+    const activation = await projects.activate(licenseKey, body.projectIds);
+    if (!activation.success) {
+      const available = await projectsService.list();
+      return c.json(
+        {
+          success: false,
+          error: activation.code,
+          message: activation.error,
+          projectLimit: result.license?.seats,
+          projects: available.success ? available.value.map(({ id, name }) => ({ id, name })) : [],
+        },
+        400
+      );
+    }
+    return c.json({ success: true, license: activation.value });
   } catch (error) {
     return c.json(
       {
@@ -141,8 +166,8 @@ app.delete('/', authMiddleware, authorize(['admin']), async (c) => {
   }
 
   try {
-    await licenseService.removeLicense();
     await settingsRepo.delete('ee:license_key');
+    await licenseService.removeLicense();
     return c.json({ success: true });
   } catch (error) {
     return c.json(
@@ -154,6 +179,29 @@ app.delete('/', authMiddleware, authorize(['admin']), async (c) => {
       500
     );
   }
+});
+
+app.put('/projects', authMiddleware, authorize(['admin']), async (c) => {
+  const service = getEEProjectLicenseService();
+  if (!service) return c.json({ success: false, error: 'EE_NOT_AVAILABLE' }, 400);
+  const body: unknown = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || !('projectIds' in body)) {
+    return c.json(
+      { success: false, error: 'INVALID_INPUT', message: 'projectIds is required' },
+      400
+    );
+  }
+  const result = service.selectProjects(body.projectIds);
+  return result.success
+    ? c.json({ success: true, ...result.value })
+    : c.json({ success: false, error: result.code, message: result.error }, 400);
+});
+
+app.post('/sync', authMiddleware, authorize(['admin']), async (c) => {
+  const result = await syncEELicense();
+  return result.success
+    ? c.json({ success: true, updated: result.value, ...getLicenseStatus() })
+    : c.json({ success: false, error: 'LICENSE_SYNC_FAILED', message: result.error }, 502);
 });
 
 export default app;

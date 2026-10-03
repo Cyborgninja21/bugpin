@@ -1,3 +1,5 @@
+import { getEEProjectLicenseService } from '../../utils/ee.js';
+import { ProjectLicenseError } from '../../utils/project-license.js';
 import { getDb } from '../database.js';
 import { generateId, generateApiKey } from '../../utils/id.js';
 import { hashApiKey } from '../../utils/crypto.js';
@@ -95,25 +97,36 @@ export const projectsRepo = {
     const apiKeyPrefix = apiKey.substring(0, 12);
     const now = new Date().toISOString();
 
-    // Shift all existing projects down by 1 position
-    db.run('UPDATE projects SET position = position + 1, updated_at = ? WHERE deleted_at IS NULL', [
-      now,
-    ]);
+    db.transaction(() => {
+      const reservation = getEEProjectLicenseService()?.reserveProject(id);
+      if (reservation && !reservation.success) {
+        throw new ProjectLicenseError(
+          reservation.error,
+          reservation.code ?? 'PROJECT_LIMIT_REACHED'
+        );
+      }
 
-    db.run(
-      `INSERT INTO projects (id, name, api_key_hash, api_key_prefix, api_key, settings, position, created_at, updated_at)
+      // Shift all existing projects down by 1 position
+      db.run(
+        'UPDATE projects SET position = position + 1, updated_at = ? WHERE deleted_at IS NULL',
+        [now]
+      );
+
+      db.run(
+        `INSERT INTO projects (id, name, api_key_hash, api_key_prefix, api_key, settings, position, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      [
-        id,
-        data.name,
-        apiKeyHash,
-        apiKeyPrefix,
-        apiKey,
-        JSON.stringify(data.settings ?? {}),
-        now,
-        now,
-      ]
-    );
+        [
+          id,
+          data.name,
+          apiKeyHash,
+          apiKeyPrefix,
+          apiKey,
+          JSON.stringify(data.settings ?? {}),
+          now,
+          now,
+        ]
+      );
+    })();
 
     const project = await this.findById(id);
     if (!project) {

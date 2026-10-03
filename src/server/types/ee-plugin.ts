@@ -125,6 +125,21 @@ export interface EEHooks {
     report: Report,
     changes: Record<string, { old: unknown; new: unknown }>
   ): Promise<void>;
+export interface ProjectLicenseStatus {
+  projectLimit: number | null;
+  usedProjects: number;
+  licensedProjectIds: string[];
+  selectionRequired: boolean;
+}
+
+export interface ProjectLicenseService {
+  getStatus(): ProjectLicenseStatus;
+  checkAccess(projectId: string): Result<void>;
+  reserveProject(projectId: string): Result<void>;
+  activate(key: string, projectIds?: unknown): Promise<Result<unknown>>;
+  selectProjects(projectIds: unknown): Result<ProjectLicenseStatus>;
+}
+
   onReportDeleted(report: Report): Promise<void>;
 
   // Storage provider hook

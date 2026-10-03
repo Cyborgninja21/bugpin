@@ -111,6 +111,7 @@ export interface StorageKeys {
 }
 
 export interface Report {
+  licenseLocked?: boolean;
   id: string;
   projectId: string;
   projectName?: string; // Only populated in list queries with JOIN
@@ -287,6 +288,7 @@ export interface CustomField {
 }
 
 export interface Project {
+  licenseLocked?: boolean;
   id: string;
   name: string;
   apiKey: string;

@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
 import { Branding } from '../../../pages/console/Branding';
 import { toast } from 'sonner';
+import { http, HttpResponse } from 'msw';
+import { server } from '../../mocks/server';
+import { api } from '../../../api/client';
 import { getCroppedImg } from '../../../lib/imageUtils';
 
 const brandingApiMocks = vi.hoisted(() => ({
@@ -89,6 +92,13 @@ describe('Branding', () => {
   const originalRevokeObjectUrl = URL.revokeObjectURL;
 
   beforeEach(() => {
+    server.use(
+      http.get('/api/white-label/config', () =>
+        HttpResponse.json({
+          config: { hideFooterBranding: false, hideEmailBranding: false, customCopyright: '' },
+        })
+      )
+    );
     licenseApiMocks.getFeatures.mockResolvedValue({
       features: {
         'custom-branding': true,
@@ -135,6 +145,7 @@ describe('Branding', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
     global.Image = originalImage;
     URL.createObjectURL = originalCreateObjectUrl;
     URL.revokeObjectURL = originalRevokeObjectUrl;
@@ -251,5 +262,53 @@ describe('Branding', () => {
     await waitFor(() => {
       expect(brandingApiMocks.uploadFavicon).toHaveBeenCalledWith('dark', expect.any(File));
     });
+  });
+
+  it('saves white-label settings from Branding', async () => {
+    const put = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    renderWithQuery(<Branding />);
+
+    const footer = await screen.findByRole('switch', { name: 'Hide admin footer branding' });
+    const favicon = screen.getByText('Favicon');
+    const whiteLabel = screen.getByText('White-label');
+    expect(
+      favicon.compareDocumentPosition(whiteLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    await user.click(footer);
+    await user.type(screen.getByLabelText('Copyright text'), 'Example Ltd');
+    await user.click(screen.getByRole('button', { name: 'Save white-label settings' }));
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith('/white-label/config', {
+        hideFooterBranding: true,
+        hideEmailBranding: false,
+        customCopyright: 'Example Ltd',
+      })
+    );
+  });
+
+  it('shows licensed white-label settings independently of custom branding', async () => {
+    licenseApiMocks.getFeatures.mockResolvedValue({
+      features: { 'white-label': true, 'custom-branding': false },
+    });
+    renderWithQuery(<Branding />);
+
+    expect(
+      await screen.findByRole('switch', { name: 'Hide admin footer branding' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Brand Colors')).not.toBeInTheDocument();
+  });
+
+  it('does not load white-label settings without the feature', async () => {
+    licenseApiMocks.getFeatures.mockResolvedValue({
+      features: { 'white-label': false, 'custom-branding': true },
+    });
+    const get = vi.spyOn(api, 'get');
+    renderWithQuery(<Branding />);
+
+    expect(await screen.findByText('Brand Colors')).toBeInTheDocument();
+    expect(screen.queryByText('White-label')).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalledWith('/white-label/config');
   });
 });

@@ -42,23 +42,13 @@ settings.get('/', authorize(['admin']), async (c) => {
 // Update Settings
 
 settings.put('/', authorize(['admin']), validate({ body: schemas.updateSettings }), async (c) => {
-  const body = await c.req.json();
-
-  // Check if emailTemplates is being updated without EE license
-  if (body.emailTemplates && !hasEEFeature('custom-templates')) {
-    return c.json(
-      {
-        success: false,
-        error: 'FEATURE_NOT_LICENSED',
-        message: "Feature 'custom-templates' requires Enterprise license",
-        upgradeUrl: 'https://bugpin.io/editions/',
-      },
-      402
-    );
-  }
+  const body = schemas.updateSettings.parse(c.get('validatedBody' as never));
 
   // Check if S3 storage is being enabled without EE license
-  if ((body.s3Enabled || body.s3Config) && !hasEEFeature('s3-storage')) {
+  if (
+    (body.s3Enabled !== undefined || body.s3Config !== undefined) &&
+    !hasEEFeature('s3-storage')
+  ) {
     return c.json(
       {
         success: false,
@@ -70,6 +60,19 @@ settings.put('/', authorize(['admin']), validate({ body: schemas.updateSettings 
     );
   }
 
+  if (
+    (body.branding !== undefined || body.adminButton !== undefined) &&
+    !hasEEFeature('custom-branding')
+  ) {
+    return c.json(
+      {
+        success: false,
+        error: 'FEATURE_NOT_LICENSED',
+        message: 'Custom branding requires Enterprise license',
+      },
+      402
+    );
+  }
   const result = await settingsService.update(body);
 
   if (!result.success) {

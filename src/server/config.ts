@@ -78,7 +78,8 @@ function loadConfig() {
     ...parsed,
     // Hardcoded values (port 7301 in dev for Vite proxy, 7300 in production)
     port: isDevelopment ? 7301 : 7300,
-    host: '0.0.0.0',
+    // Bind address: HOST env (ADR-058 IPv6 rollout sets '::' for dual-stack), default IPv4 any.
+    host: process.env.HOST || '0.0.0.0',
     adminEmail: 'admin@example.com',
     adminPassword: 'changeme123',
     // Derived values

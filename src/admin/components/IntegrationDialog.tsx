@@ -20,6 +20,7 @@ import {
   GitHubLabel,
   GitHubAssignee,
 } from '../hooks/useIntegrations';
+import { ScrollArea } from './ui/scroll-area';
 import { SyncExistingReportsDialog } from './SyncExistingReportsDialog';
 import {
   Dialog,
@@ -413,7 +414,7 @@ export function IntegrationDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <DialogBody className="space-y-3 flex-1">
+            <DialogBody className="flex-1" contentClassName="space-y-3">
               <div className="space-y-2">
                 <Label htmlFor="name">
                   Integration Name <span className="text-destructive">*</span>
@@ -596,7 +597,10 @@ export function IntegrationDialog({
                       </p>
                     ) : availableLabels.length > 0 ? (
                       <div className="space-y-2">
-                        <div className="border rounded-md p-2 max-h-28 overflow-y-auto space-y-1">
+                        <ScrollArea
+                          className="border rounded-md max-h-28"
+                          contentClassName="p-2 space-y-1"
+                        >
                           {availableLabels.map((label) => (
                             <div key={label.name} className="flex items-center space-x-2">
                               <Checkbox
@@ -624,7 +628,7 @@ export function IntegrationDialog({
                               </label>
                             </div>
                           ))}
-                        </div>
+                        </ScrollArea>
                         {selectedLabels.length > 0 && (
                           <p className="text-xs text-muted-foreground">
                             Selected: {selectedLabels.join(', ')}
@@ -674,7 +678,10 @@ export function IntegrationDialog({
                       </p>
                     ) : availableAssignees.length > 0 ? (
                       <div className="space-y-2">
-                        <div className="border rounded-md p-2 max-h-28 overflow-y-auto space-y-1">
+                        <ScrollArea
+                          className="border rounded-md max-h-28"
+                          contentClassName="p-2 space-y-1"
+                        >
                           {availableAssignees.map((assignee) => (
                             <div key={assignee.login} className="flex items-center space-x-2">
                               <Checkbox
@@ -703,7 +710,7 @@ export function IntegrationDialog({
                               </label>
                             </div>
                           ))}
-                        </div>
+                        </ScrollArea>
                         {selectedAssignees.length > 0 && (
                           <p className="text-xs text-muted-foreground">
                             Selected: {selectedAssignees.join(', ')}

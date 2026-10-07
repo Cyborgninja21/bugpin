@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -36,7 +36,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   // Update resolved theme when theme or system preference changes
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateResolvedTheme = () => {
       const resolved = theme === 'system' ? getSystemTheme() : theme;
       setResolvedTheme(resolved);

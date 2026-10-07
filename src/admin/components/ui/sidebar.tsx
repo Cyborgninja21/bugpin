@@ -6,6 +6,7 @@ import { PanelLeft } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from './button';
 import { Separator } from './separator';
+import { ScrollArea } from './scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
 
 const SIDEBAR_COOKIE_NAME = 'sidebar:state';
@@ -387,21 +388,23 @@ const SidebarSeparator = React.forwardRef<
 });
 SidebarSeparator.displayName = 'SidebarSeparator';
 
-const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
-  ({ className, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        data-sidebar="content"
-        className={cn(
-          'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
-          className
-        )}
-        {...props}
-      />
-    );
-  }
-);
+const SidebarContent = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<typeof ScrollArea>
+>(({ className, ...props }, ref) => {
+  return (
+    <ScrollArea
+      ref={ref}
+      data-sidebar="content"
+      className={cn(
+        'flex-1 group-data-[collapsible=icon]:[&_[data-radix-scroll-area-viewport]]:!overflow-hidden',
+        className
+      )}
+      contentClassName="flex flex-col gap-2"
+      {...props}
+    />
+  );
+});
 SidebarContent.displayName = 'SidebarContent';
 
 const SidebarGroup = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(

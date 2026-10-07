@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
 import { License } from '../../../pages/console/License';
 import { licenseApi } from '../../../api/license';
+import { ENTERPRISE_AGREEMENT_VERSION, ENTERPRISE_AGREEMENT_URL } from '@shared/enterprise-license';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -88,10 +89,19 @@ it('asks for project selection before activating an over-capacity license', asyn
   renderWithQuery(<License />);
   await user.type(await screen.findByRole('textbox', { name: 'License Key' }), 'test-license');
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
+  await user.click(
+    screen.getByRole('checkbox', { name: 'I accept the BugPin Enterprise License Agreement.' })
+  );
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   await user.click(await screen.findByRole('checkbox', { name: 'Project One' }));
   expect(screen.getByRole('checkbox', { name: 'Project Two' })).toBeDisabled();
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
-  await waitFor(() => expect(activate).toHaveBeenLastCalledWith('test-license', ['proj_one']));
+  await waitFor(() =>
+    expect(activate).toHaveBeenLastCalledWith('test-license', ['proj_one'], {
+      accepted: true,
+      version: ENTERPRISE_AGREEMENT_VERSION,
+    })
+  );
   expect(await screen.findByText('1 of 1 projects used')).toBeInTheDocument();
 });
 
@@ -131,4 +141,55 @@ it('syncs an increased allowance without reactivation and lets the admin allocat
   await user.click(screen.getByRole('button', { name: 'Save project selection' }));
   await waitFor(() => expect(select.mock.calls[0]?.[0]).toEqual(['proj_one', 'proj_two']));
   expect(await screen.findByText('2 of 2 projects used')).toBeInTheDocument();
+});
+
+it('requires agreement acceptance before activation, resets on dismissal, and prevents duplicate activation', async () => {
+  let licensed = false;
+  let complete!: () => void;
+  vi.spyOn(licenseApi, 'getStatus').mockImplementation(async () => ({
+    eeAvailable: true,
+    licensed,
+  }));
+  const activate = vi.spyOn(licenseApi, 'activate').mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        complete = () => {
+          licensed = true;
+          resolve();
+        };
+      })
+  );
+  const user = userEvent.setup();
+  renderWithQuery(<License />);
+  await user.type(await screen.findByRole('textbox', { name: 'License Key' }), 'test-license');
+  const open = screen.getByRole('button', { name: 'Activate License' });
+  await user.click(open);
+  expect(screen.getByRole('link', { name: 'BugPin Enterprise License Agreement' })).toHaveAttribute(
+    'href',
+    ENTERPRISE_AGREEMENT_URL
+  );
+  const agree = screen.getByRole('button', { name: 'Agree & Activate' });
+  expect(agree).toBeDisabled();
+  await user.click(agree);
+  expect(activate).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('checkbox'));
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(activate).not.toHaveBeenCalled();
+  await user.click(open);
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  await user.click(screen.getByRole('checkbox'));
+  await user.keyboard('{Escape}');
+  await user.click(open);
+  expect(screen.getByRole('button', { name: 'Agree & Activate' })).toBeDisabled();
+  await user.click(screen.getByRole('checkbox'));
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
+  expect(activate).toHaveBeenCalledTimes(1);
+  expect(activate).toHaveBeenCalledWith('test-license', undefined, {
+    accepted: true,
+    version: ENTERPRISE_AGREEMENT_VERSION,
+  });
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  complete();
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
 });

@@ -2,6 +2,7 @@ import type { Readable } from 'node:stream';
 import type { Hono } from 'hono';
 import type { Report, EmailTemplateType, User, CustomEmailTemplates } from '@shared/types';
 import type { Result } from '../utils/result.js';
+import type { EnterpriseLicenseAcceptance } from '@shared/enterprise-license';
 
 /**
  * Storage provider interface for S3 or other storage backends
@@ -133,10 +134,15 @@ export interface ProjectLicenseStatus {
 }
 
 export interface ProjectLicenseService {
+  agreementVersion?: string;
   getStatus(): ProjectLicenseStatus;
   checkAccess(projectId: string): Result<void>;
   reserveProject(projectId: string): Result<void>;
-  activate(key: string, projectIds?: unknown): Promise<Result<unknown>>;
+  activate(
+    key: string,
+    projectIds: unknown,
+    acceptance: EnterpriseLicenseAcceptance
+  ): Promise<Result<unknown>>;
   selectProjects(projectIds: unknown): Result<ProjectLicenseStatus>;
 }
 

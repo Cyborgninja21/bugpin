@@ -58,7 +58,13 @@ export function License() {
     }
   };
 
-  const { data: status, isLoading } = useQuery({
+  const {
+    data: status,
+    isLoading,
+    isFetching,
+    isError: statusError,
+    refetch: refetchStatus,
+  } = useQuery({
     queryKey: ['license-status'],
     queryFn: licenseApi.getStatus,
   });
@@ -70,9 +76,6 @@ export function License() {
         version: ENTERPRISE_AGREEMENT_VERSION,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['license-status'] });
-      queryClient.invalidateQueries({ queryKey: ['license-features'] });
-      queryClient.invalidateQueries({ queryKey: ['branding-config'] });
       toast.success('License activated successfully');
       setAgreementOpen(false);
       setAgreementAccepted(false);
@@ -189,7 +192,27 @@ export function License() {
     });
   };
 
-  if (isLoading) {
+  if (statusError) {
+    return (
+      <Card className="max-w-4xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5" />
+            License Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p role="alert">Could not load license status. Retry to see your installed license.</p>
+          <Button variant="outline" onClick={() => void refetchStatus()} disabled={isFetching}>
+            {isFetching && <Spinner size="sm" />}
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading || (isFetching && !status?.licensed && !status?.installed)) {
     return (
       <Card className="max-w-4xl">
         <CardContent className="py-12">
@@ -465,7 +488,7 @@ export function License() {
                     setSelectedIds(null);
                   }}
                   rows={4}
-                  className="font-mono text-sm"
+                  className="field-sizing-content min-h-[100px] resize-none font-mono text-sm"
                 />
               </div>
               <div className="flex items-center gap-4">
@@ -503,7 +526,7 @@ export function License() {
               another person or an organization, you must be authorized to accept on their behalf.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="flex items-start gap-3 py-2">
+          <div className="flex items-center gap-3 py-2">
             <Checkbox
               id="enterprise-license-agreement"
               checked={agreementAccepted}

@@ -1,10 +1,50 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithQuery, screen, userEvent, waitFor } from '../../utils';
 import { License } from '../../../pages/console/License';
-import { licenseApi } from '../../../api/license';
+import { licenseApi, type LicenseStatus } from '../../../api/license';
 import { ENTERPRISE_AGREEMENT_VERSION, ENTERPRISE_AGREEMENT_URL } from '@shared/enterprise-license';
 
 afterEach(() => vi.restoreAllMocks());
+
+it('shows a synced inactive license with its details and allows sync to restore it', async () => {
+  const { api } = await import('../../../api/client');
+  vi.spyOn(api, 'get').mockResolvedValue({ data: { projects: [] } });
+  const active: LicenseStatus = {
+    eeAvailable: true,
+    installed: true,
+    licensed: true,
+    customerName: 'Customer',
+    customerEmail: 'customer@example.com',
+    projectLimit: 1,
+    features: ['webhooks'],
+  };
+  let status = active;
+  vi.spyOn(licenseApi, 'getStatus').mockImplementation(async () => status);
+  const remove = vi.spyOn(licenseApi, 'remove');
+  const sync = vi.spyOn(licenseApi, 'sync').mockImplementation(async () => {
+    status = status.licensed
+      ? { ...active, licensed: false, message: 'License inactive', features: [] }
+      : active;
+    return status;
+  });
+  const user = userEvent.setup();
+  renderWithQuery(<License />);
+  await user.click(await screen.findByRole('button', { name: 'Sync license' }));
+  expect(await screen.findByText('Inactive')).toBeInTheDocument();
+  expect(screen.getByText('Customer', { selector: 'p.font-medium' })).toBeInTheDocument();
+  expect(screen.getByText('customer@example.com')).toBeInTheDocument();
+  expect(
+    screen.getByText('License inactive. Enterprise features are disabled.')
+  ).toBeInTheDocument();
+  expect(screen.queryByText('webhooks')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Activate License' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove License' })).toBeInTheDocument();
+  expect(remove).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Sync license' }));
+  expect(await screen.findByText('Licensed')).toBeInTheDocument();
+  expect(screen.getByText('webhooks')).toBeInTheDocument();
+  expect(sync).toHaveBeenCalledTimes(2);
+});
 
 it('requires exact confirmation for removal, resets on dismissal, and prevents repeat requests', async () => {
   let licensed = true;

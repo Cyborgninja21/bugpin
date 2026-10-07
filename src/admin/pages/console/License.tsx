@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ENTERPRISE_AGREEMENT_VERSION, ENTERPRISE_AGREEMENT_URL } from '@shared/enterprise-license';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { licenseApi } from '../../api/license';
@@ -34,6 +35,8 @@ export function License() {
   const queryClient = useQueryClient();
   const [licenseKey, setLicenseKey] = useState('');
   const [removeConfirmation, setRemoveConfirmation] = useState('');
+  const [agreementOpen, setAgreementOpen] = useState(false);
+  const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [activationSelection, setActivationSelection] = useState<{
     projectLimit: number;
     projects: { id: string; name: string }[];
@@ -62,12 +65,17 @@ export function License() {
 
   const activateMutation = useMutation({
     mutationFn: ({ key, projectIds }: { key: string; projectIds?: string[] }) =>
-      licenseApi.activate(key, projectIds),
+      licenseApi.activate(key, projectIds, {
+        accepted: true,
+        version: ENTERPRISE_AGREEMENT_VERSION,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['license-status'] });
       queryClient.invalidateQueries({ queryKey: ['license-features'] });
       queryClient.invalidateQueries({ queryKey: ['branding-config'] });
       toast.success('License activated successfully');
+      setAgreementOpen(false);
+      setAgreementAccepted(false);
       setLicenseKey('');
       setActivationSelection(null);
       setSelectedIds(null);
@@ -91,6 +99,7 @@ export function License() {
         typeof details.projectLimit === 'number' &&
         details.projects
       ) {
+        setAgreementOpen(false);
         setActivationSelection({ projectLimit: details.projectLimit, projects: details.projects });
         setSelectedIds([]);
         return;
@@ -160,6 +169,16 @@ export function License() {
       toast.error('Please enter a license key');
       return;
     }
+    if (activationSelection && agreementAccepted) {
+      confirmActivation();
+    } else {
+      setAgreementAccepted(false);
+      setAgreementOpen(true);
+    }
+  };
+
+  const confirmActivation = () => {
+    if (!agreementAccepted || activateMutation.isPending) return;
     activateMutation.mutate({
       key: licenseKey.trim(),
       projectIds: activationSelection ? (selectedIds ?? []) : undefined,
@@ -410,8 +429,10 @@ export function License() {
                   id="license-key"
                   placeholder="Paste your license key here..."
                   value={licenseKey}
+                  disabled={activateMutation.isPending}
                   onChange={(e) => {
                     setLicenseKey(e.target.value);
+                    setAgreementAccepted(false);
                     setActivationSelection(null);
                     setSelectedIds(null);
                   }}
@@ -438,6 +459,57 @@ export function License() {
           )}
         </CardContent>
       </Card>
+      <AlertDialog
+        open={agreementOpen}
+        onOpenChange={(open) => {
+          if (activateMutation.isPending) return;
+          setAgreementOpen(open);
+          if (!open) setAgreementAccepted(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
+            <AlertDialogDescription>
+              Review the Enterprise License Agreement before activating this license. If you act for
+              another person or an organization, you must be authorized to accept on their behalf.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex items-start gap-3 py-2">
+            <Checkbox
+              id="enterprise-license-agreement"
+              checked={agreementAccepted}
+              onCheckedChange={(checked) => setAgreementAccepted(checked === true)}
+              disabled={activateMutation.isPending}
+            />
+            <Label htmlFor="enterprise-license-agreement" className="text-sm leading-relaxed">
+              I accept the{' '}
+              <a
+                href={ENTERPRISE_AGREEMENT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                BugPin Enterprise License Agreement
+              </a>
+              .
+            </Label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={activateMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!agreementAccepted || activateMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmActivation();
+              }}
+            >
+              {activateMutation.isPending && <Spinner size="sm" className="mr-2" />}
+              Agree &amp; Activate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

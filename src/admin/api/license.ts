@@ -49,8 +49,12 @@ export const licenseApi = {
   /**
    * Activate a license key
    */
-  async activate(licenseKey: string, projectIds?: string[]): Promise<void> {
-    await axios.post('/api/license/activate', { licenseKey, projectIds });
+  async activate(
+    licenseKey: string,
+    projectIds: string[] | undefined,
+    agreement: { accepted: true; version: string }
+  ): Promise<void> {
+    await axios.post('/api/license/activate', { licenseKey, projectIds, agreement });
   },
 
   /**

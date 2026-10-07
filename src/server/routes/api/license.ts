@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware, authorize } from '../../middleware/auth.js';
+import { requireLicenseAgreement } from '../../middleware/license-agreement.js';
 import {
   getLicenseStatus,
   isEEAvailable,
@@ -68,7 +69,7 @@ app.get('/feature/:feature', authMiddleware, async (c) => {
 /**
  * POST /api/license/activate - Activate a license key (admin only)
  */
-app.post('/activate', authMiddleware, authorize(['admin']), async (c) => {
+app.post('/activate', authMiddleware, authorize(['admin']), requireLicenseAgreement, async (c) => {
   const licenseService = getEELicenseService();
 
   if (!licenseService) {
@@ -121,7 +122,11 @@ app.post('/activate', authMiddleware, authorize(['admin']), async (c) => {
         400
       );
     }
-    const activation = await projects.activate(licenseKey, body.projectIds);
+    const activation = await projects.activate(
+      licenseKey,
+      body.projectIds,
+      c.get('licenseAgreementAcceptance')
+    );
     if (!activation.success) {
       const available = await projectsService.list();
       return c.json(

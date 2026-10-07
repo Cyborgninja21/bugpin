@@ -3,6 +3,7 @@ import axios from 'axios';
 export interface LicenseStatus {
   eeAvailable: boolean;
   licensed: boolean;
+  installed?: boolean;
   message?: string;
   plan?: string;
   customerName?: string;
@@ -58,7 +59,7 @@ export const licenseApi = {
   },
 
   /**
-   * Remove the current license
+   * Sync the installed license with the license server
    */
   async sync(): Promise<LicenseStatus> {
     const response = await axios.post<LicenseStatus>('/api/license/sync');

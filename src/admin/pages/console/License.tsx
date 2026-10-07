@@ -138,10 +138,14 @@ export function License() {
 
   const syncMutation = useMutation({
     mutationFn: licenseApi.sync,
-    onSuccess: () => {
+    onSuccess: (synced) => {
       invalidateLicense();
       setSelectedIds(null);
-      toast.success('License synced');
+      if (synced.message === 'License inactive') {
+        toast.info('License is inactive. Enterprise features are disabled.');
+      } else {
+        toast.success('License synced');
+      }
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(
@@ -215,16 +219,25 @@ export function License() {
           <CardDescription>
             {isLicensed
               ? 'Your Enterprise license is active'
-              : 'Enter your license key to unlock Enterprise features'}
+              : status?.installed
+                ? `${status.message}. Enterprise features are disabled.`
+                : 'Enter your license key to unlock Enterprise features'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLicensed ? (
+          {isLicensed || status?.installed ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Badge variant="default" className="bg-green-600">
-                  <Check className="h-3 w-3 mr-1" />
-                  Licensed
+                <Badge
+                  variant={isLicensed ? 'default' : 'secondary'}
+                  className={isLicensed ? 'bg-green-600' : undefined}
+                >
+                  {isLicensed && <Check className="h-3 w-3 mr-1" />}
+                  {isLicensed
+                    ? 'Licensed'
+                    : status?.message === 'License inactive'
+                      ? 'Inactive'
+                      : 'Expired'}
                 </Badge>
               </div>
 
@@ -266,7 +279,22 @@ export function License() {
                 </div>
               </div>
 
-              {typeof status?.projectLimit === 'number' && (
+              {!isLicensed && (
+                <Button
+                  variant="outline"
+                  onClick={() => syncMutation.mutate()}
+                  disabled={syncMutation.isPending || removeMutation.isPending}
+                >
+                  {syncMutation.isPending ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Sync license
+                </Button>
+              )}
+
+              {isLicensed && typeof status?.projectLimit === 'number' && (
                 <div className="space-y-4 border-t pt-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>

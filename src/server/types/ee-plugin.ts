@@ -142,7 +142,7 @@ export interface ProjectLicenseService {
     key: string,
     projectIds: unknown,
     acceptance: EnterpriseLicenseAcceptance
-  ): Promise<Result<unknown>>;
+  ): Promise<Result<unknown> & { projectLimit?: number }>;
   selectProjects(projectIds: unknown): Result<ProjectLicenseStatus>;
 }
 

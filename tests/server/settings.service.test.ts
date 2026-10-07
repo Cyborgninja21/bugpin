@@ -160,6 +160,32 @@ describe('settingsService.update', () => {
     expect(lastUpdates?.privacy).toEqual(privacy);
   });
 
+  it('persists the global widget language setting', async () => {
+    const language = { mode: 'manual' as const, defaultLanguage: 'de' as const };
+    const result = await settingsService.update({ language });
+
+    expect(result.success).toBe(true);
+    expect(lastUpdates?.language).toEqual(language);
+    if (result.success) {
+      expect(result.value.language.defaultLanguage).toBe('de');
+    }
+  });
+
+  it('persists global reporter notification settings', async () => {
+    const reporterNotifications = {
+      emailEnabled: true,
+      notifyOnNewReport: true,
+      notifyOnStatusChange: false,
+      notifyOnPriorityChange: true,
+      notifyOnAssignment: true,
+      messagingEnabled: true,
+    };
+    const result = await settingsService.update({ reporterNotifications });
+
+    expect(result.success).toBe(true);
+    expect(lastUpdates?.reporterNotifications).toEqual(reporterNotifications);
+  });
+
   it('accepts valid SMTP config and trims inputs', async () => {
     const result = await settingsService.update({
       appName: '  BugPin  ',

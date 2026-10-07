@@ -17,6 +17,8 @@ import type {
   AdminButtonColors,
   ThemeColors,
   PrivacySettings,
+  ProjectLanguageSettings,
+  ReporterNotificationSettings,
 } from '@shared/types';
 
 // Types
@@ -57,10 +59,14 @@ export interface UpdateSettingsInput {
   screenshot?: Partial<GlobalScreenshotSettings>;
   // Notification defaults
   notifications?: Partial<NotificationDefaultSettings>;
+  // Reporter notification defaults
+  reporterNotifications?: Partial<ReporterNotificationSettings>;
   // Branding settings
   branding?: Partial<BrandingSettings>;
   // Admin Console settings
   adminButton?: Partial<AdminButtonColors>;
+  // Widget language defaults
+  language?: ProjectLanguageSettings;
 }
 
 // Service
@@ -246,6 +252,9 @@ export const settingsService = {
     if (input.notifications !== undefined) {
       updates.notifications = input.notifications as NotificationDefaultSettings;
     }
+    if (input.reporterNotifications !== undefined) {
+      updates.reporterNotifications = input.reporterNotifications as ReporterNotificationSettings;
+    }
 
     // Branding settings
     if (input.branding !== undefined) {
@@ -255,6 +264,11 @@ export const settingsService = {
     // Admin Console settings
     if (input.adminButton !== undefined) {
       updates.adminButton = input.adminButton as AdminButtonColors;
+    }
+
+    // Widget language settings
+    if (input.language !== undefined) {
+      updates.language = input.language;
     }
 
     const settings = await settingsRepo.updateAll(updates);

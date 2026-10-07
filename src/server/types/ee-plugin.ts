@@ -183,8 +183,7 @@ export type EEFeature =
   | 'white-label'
   | 'custom-templates'
   | 's3-storage'
-  | 'advanced-roles'
-  | 'priority-support';
+  | 'advanced-roles';
 
 /**
  * EE Plugin interface

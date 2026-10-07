@@ -3,6 +3,7 @@ import { integrationsRepo } from '../../database/repositories/integrations.repo.
 import { filesRepo } from '../../database/repositories/files.repo.js';
 import { githubService } from './github.service.js';
 import { settingsService } from '../settings.service.js';
+import { checkProjectLicense } from '../../utils/project-license.js';
 import { Result } from '../../utils/result.js';
 import { logger } from '../../utils/logger.js';
 import type { Integration, GitHubIntegrationConfig, ReportStatus } from '@shared/types';
@@ -59,6 +60,12 @@ export const githubSyncService = {
     if (!integration) {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
+
+    if (report.projectId !== integration.projectId)
+      return Result.fail('Integration does not belong to this project', 'PROJECT_MISMATCH');
 
     if (integration.type !== 'github') {
       return Result.fail('Integration is not a GitHub integration', 'INVALID_TYPE');
@@ -225,7 +232,9 @@ export const githubSyncService = {
       if (
         result.code === 'NOT_FOUND' ||
         result.code === 'INVALID_TYPE' ||
-        result.code === 'INACTIVE'
+        result.code === 'INACTIVE' ||
+        result.code === 'PROJECT_NOT_LICENSED' ||
+        result.code === 'PROJECT_MISMATCH'
       ) {
         return result;
       }
@@ -253,6 +262,7 @@ export const githubSyncService = {
    * Check if a project has automatic sync enabled
    */
   async getAutoSyncIntegration(projectId: string): Promise<Integration | null> {
+    if (!checkProjectLicense(projectId).success) return null;
     const integrations = await integrationsRepo.findByProjectId(projectId);
 
     for (const integration of integrations) {
@@ -276,6 +286,9 @@ export const githubSyncService = {
     if (!integration) {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
 
     if (integration.type !== 'github') {
       return Result.fail('Only GitHub integrations support automatic sync', 'INVALID_TYPE');
@@ -351,6 +364,9 @@ export const githubSyncService = {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
 
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
+
     if (integration.type !== 'github') {
       return Result.fail('Only GitHub integrations support automatic sync', 'INVALID_TYPE');
     }
@@ -397,6 +413,9 @@ export const githubSyncService = {
     if (!integration) {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
 
     // Find report by issue number
     const report = await reportsRepo.findByGitHubIssueNumber(integration.projectId, issue.number);

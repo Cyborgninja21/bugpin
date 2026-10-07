@@ -2,6 +2,13 @@ import { api } from './client';
 import type { ThemeColors } from '@shared/types';
 
 export interface BrandingConfig {
+  whiteLabel?: {
+    enabled: boolean;
+    hideFooterBranding: boolean;
+    hideEmailBranding: boolean;
+    hidePoweredBy: boolean;
+    customCopyright?: string;
+  };
   primaryColor: string;
   logoLightUrl: string | null;
   logoDarkUrl: string | null;

@@ -15,6 +15,7 @@ const BrandingContext = createContext<BrandingContextType | undefined>(undefined
  */
 function hexToHsl(hex: string): string {
   // Remove # if present
+  if (typeof hex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(hex)) hex = '#02658D';
   hex = hex.replace(/^#/, '');
 
   // Parse hex values

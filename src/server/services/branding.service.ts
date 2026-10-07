@@ -1,3 +1,5 @@
+import { getEEHooks } from '../utils/ee-hooks.js';
+import type { WhiteLabelConfig } from '../types/ee-plugin.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
@@ -17,6 +19,7 @@ import type { ThemeColors, AdminButtonColors } from '@shared/types';
 // Types
 
 export interface BrandingConfig {
+  whiteLabel?: WhiteLabelConfig;
   primaryColor: string;
   logoLightUrl: string | null;
   logoDarkUrl: string | null;
@@ -40,6 +43,7 @@ export const brandingService = {
       const settings = await settingsRepo.getAll();
 
       const config: BrandingConfig = {
+        whiteLabel: await getEEHooks().getWhiteLabelService()?.getConfig(),
         primaryColor: settings.branding.primaryColor,
         logoLightUrl: settings.branding.logoLightUrl,
         logoDarkUrl: settings.branding.logoDarkUrl,

@@ -26,7 +26,7 @@ class MockEventSource {
   static instances: MockEventSource[] = [];
   url: string;
   listeners: Record<string, (event: MessageEvent) => void> = {};
-  onerror: ((this: EventSource, ev: Event) => any) | null = null;
+  onerror: ((this: EventSource, ev: Event) => void) | null = null;
 
   constructor(url: string) {
     this.url = url;
@@ -175,5 +175,39 @@ describe('Storage', () => {
     await waitFor(() => {
       expect(toast.info).toHaveBeenCalledWith('Migration cancelled');
     });
+  });
+  it.each([
+    { status: 'completed', remaining: 0 },
+    { status: 'failed', remaining: 2 },
+    { status: 'paused', remaining: 3 },
+  ])('refreshes file counts after migration becomes $status', async ({ status, remaining }) => {
+    let localFiles = 5;
+    server.use(
+      http.get('/api/storage/stats', () =>
+        HttpResponse.json({
+          success: true,
+          stats: { totalFiles: 5, localFiles, s3Files: 5 - localFiles, totalSizeBytes: 1024 },
+        })
+      )
+    );
+    renderWithQuery(<Storage />);
+    await screen.findByRole('button', { name: 'Start Migration (5 files)' });
+    localFiles = remaining;
+    MockEventSource.instances[0].emit('progress', {
+      status,
+      totalFiles: 5,
+      processedFiles: 5 - remaining,
+      successCount: 5 - remaining,
+      failureCount: status === 'failed' ? 1 : 0,
+      errors: [],
+    });
+    if (remaining) {
+      expect(
+        await screen.findByRole('button', { name: `Start Migration (${remaining} files)` })
+      ).toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(/All files are already stored in S3/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Start Migration/ })).not.toBeInTheDocument();
+    }
   });
 });

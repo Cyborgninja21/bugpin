@@ -36,7 +36,7 @@ async function cleanupOldReports(): Promise<{ deleted: number; errors: number }>
   for (const reportId of oldReportIds) {
     try {
       // Delete associated files from storage
-      deleteReportFiles(reportId);
+      await deleteReportFiles(reportId);
 
       // Delete file records from database
       await filesRepo.deleteByReportId(reportId);

@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { brandingApi } from '../../api/branding';
+import { api } from '../../api/client';
+import { Label } from '../../components/ui/label';
+import { Switch } from '../../components/ui/switch';
 import {
   Card,
   CardContent,
@@ -56,6 +59,17 @@ export function Dialog() {
     },
   });
 
+  const brandingMutation = useMutation({
+    mutationFn: (showBranding: boolean) =>
+      api.put('/white-label/config', { hidePoweredBy: !showBranding }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['branding-config'] });
+      await queryClient.invalidateQueries({ queryKey: ['white-label'] });
+      toast.success('Widget branding updated');
+    },
+    onError: () => toast.error('Failed to update widget branding'),
+  });
+
   // Use local edits if user has made changes, otherwise use config directly
   const displayColors = localEdits ?? config?.widgetPrimaryColors ?? DEFAULT_WIDGET_COLORS;
 
@@ -93,6 +107,23 @@ export function Dialog() {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
+          {config.whiteLabel && (
+            <div className="flex items-center justify-between gap-4 border-b pb-4">
+              <div className="space-y-1">
+                <Label htmlFor="show-widget-branding">Show BugPin branding</Label>
+                <p className="text-sm text-muted-foreground">
+                  Display “Powered by BugPin” in the widget footer. Changes save automatically.
+                </p>
+              </div>
+              <Switch
+                id="show-widget-branding"
+                checked={!config.whiteLabel.hidePoweredBy}
+                onCheckedChange={(checked) => brandingMutation.mutate(checked)}
+                disabled={brandingMutation.isPending}
+              />
+            </div>
+          )}
+
           <WidgetDialogSettingsForm
             value={displayColors}
             onChange={handleChange}

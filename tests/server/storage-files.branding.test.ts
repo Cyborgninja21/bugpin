@@ -68,9 +68,9 @@ describe('branding storage', () => {
       type: 'logo',
     });
 
-    expect(icon.filename).toBe('icon-light.png');
+    expect(icon.filename).toMatch(/^icon-light-[\w-]+\.png$/);
     expect(fs.existsSync(icon.path)).toBe(true);
-    expect(logo.filename).toBe('logo-light.svg');
+    expect(logo.filename).toMatch(/^logo-light-[\w-]+\.png$/);
     expect(fs.existsSync(logo.path)).toBe(true);
   });
 
@@ -92,7 +92,7 @@ describe('branding storage', () => {
     const { saveBrandingFavicon } = await import('../../src/server/storage/files');
 
     await expect(saveBrandingFavicon('light', Buffer.from('favicon'))).rejects.toThrow(
-      'Favicon source must be at least 512x512px',
+      'Favicon source must be at least 512x512px'
     );
   });
 

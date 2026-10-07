@@ -1,38 +1,59 @@
-BugPin Enterprise Edition License
-Copyright 2026 Arantic Digital GmbH. All rights reserved.
+BugPin Enterprise License Agreement
 
-This software and associated documentation files (the "Software") may only
-be used in production with a valid Enterprise license from Arantic Digital GmbH.
+Copyright 2026 Arantic Digital GmbH. All rights reserved in proprietary components.
 
-You may:
+1. Parties and Scope
 
-- View and inspect the source code for evaluation purposes
-- Run the Software in a non-production environment for evaluation (30 days)
-- Modify the Software for internal evaluation purposes
+This agreement governs use of the proprietary BugPin Enterprise Edition software and documentation supplied by Arantic Digital GmbH, Johann-G.-Gutenberg-Str. 7, 82140 Olching, Germany ("Arantic Digital"). The license holder is the individual or entity identified in the order ("you"). If you accept for another person or an entity, you must be authorized to act on their behalf.
 
-You may not:
+Pricing, billing, subscription management, refunds, consumer withdrawal procedures, and general contractual matters are governed by the BugPin Terms of Service at https://bugpin.io/terms/. Purchases through Paddle are also subject to the Paddle Buyer Terms linked there. Mandatory statutory rights prevail over any conflicting provision in this agreement or the BugPin Terms of Service.
 
-- Use the Software in production without a valid license
-- Distribute, sublicense, or sell copies of the Software
-- Remove or alter any license or copyright notices
-- Share access credentials or license keys with third parties
-- Use the Software to provide a competing service (SaaS/hosted offering)
+2. Self-Hosted Software and License Grant
 
-License terms:
+BugPin is self-hosted software. You install and operate it on infrastructure you control. An Enterprise subscription does not include hosting or operation of your installation by Arantic Digital unless separately agreed.
 
-- Licenses are per-organization and non-transferable
-- Violation of these terms automatically terminates your license
+Subject to a valid Enterprise license, Arantic Digital grants you a non-exclusive, non-transferable right to use the proprietary Enterprise components for your own purposes within the project quantity and subscription period specified in your order and license. Your authorized users may use the licensed installation. Enterprise functionality requires a valid license; the subscription does not grant a perpetual right to use proprietary Enterprise components.
 
-Warranty disclaimer:
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+3. Evaluation
 
-Limitation of liability:
-IN NO EVENT SHALL ARANTIC DIGITAL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+Without a paid Enterprise license, you may inspect the Enterprise source code, run it in a non-production environment for evaluation for up to 30 days, and modify it for internal evaluation purposes. Production use of proprietary Enterprise components requires a valid paid license.
 
-For licensing inquiries: admin@arantic.com
+4. Restrictions
 
-The open-source components of BugPin are available under AGPL-3.0 at:
-https://github.com/aranticlabs/bugpin
+Except as expressly permitted by this agreement or applicable law, you may not distribute, sublicense, or sell proprietary Enterprise components; remove or alter license or copyright notices; share license keys or account credentials outside the license holder's authorized users; circumvent license enforcement or licensed project limits; or use proprietary Enterprise components to provide a competing hosted service. Modification of proprietary Enterprise components is permitted for internal evaluation as described in Section 3; other modification requires Arantic Digital's consent unless permitted by applicable law.
+
+These restrictions apply only to proprietary Enterprise components. They do not restrict rights granted by open-source licenses or mandatory statutory rights, including rights under the German Copyright Act.
+
+5. Community Edition and Third-Party Components
+
+BugPin Community Edition components remain available under the GNU Affero General Public License, version 3 (AGPL-3.0). Third-party components are governed by their respective licenses. You retain all rights granted by those licenses, including after an Enterprise subscription ends. Applicable license notices accompany the software.
+
+6. Customer Data and Operation
+
+You retain all rights to your bug reports, screenshots, comments, and other content. Your installation stores and processes content using your infrastructure and any providers or integrations you configure. Purchasing or activating an Enterprise license does not grant Arantic Digital access to or a license to host that content.
+
+You are responsible for your infrastructure, meeting the documented system requirements, protecting customer portal access, installation credentials and license keys, access controls, backups, configured integrations, and lawful processing of content. Notify us promptly through https://bugpin.io/contact/ if you become aware of unauthorized access to your portal account or use of your license keys. Customer portal, licensing, billing, and support data is handled as described at https://bugpin.io/privacy/. Any content you share with us for support is processed as necessary to handle your request.
+
+7. Subscription, Updates, and Termination
+
+For subscription periods, renewal, cancellation, and refunds, refer to the BugPin Terms of Service at https://bugpin.io/terms/ and, for Paddle purchases, the applicable Paddle Buyer Terms. Canceling renewal leaves the software license available until the end of the current paid period, unless the contract ends earlier through a refund, withdrawal, or termination for cause.
+
+We may release software updates to maintain security and compatibility, improve functionality, or comply with legal requirements. You manage installation of updates on your infrastructure. Arantic Digital's statutory obligations concerning required updates and the agreed software functionality remain unaffected. Material changes that negatively affect the agreed Enterprise functionality will be communicated by email at least 30 days in advance. Any such change is subject to applicable law, including required consent and statutory rights to terminate or obtain remedies.
+
+When the Enterprise license expires or is otherwise terminated, your right to use proprietary Enterprise components ends. Rights under Community Edition and other open-source licenses remain unaffected. Arantic Digital does not delete content in your self-hosted installation when the subscription ends.
+
+For a material breach of this agreement, Arantic Digital may terminate the license for cause in accordance with applicable law, including any required notice and opportunity to remedy the breach. Termination is not automatic merely because a breach is alleged.
+
+8. Warranty and Liability
+
+Arantic Digital's obligations concerning defects and remedies for Enterprise software are governed by applicable law. No provision excludes mandatory statutory warranty rights or remedies. The availability of your self-hosted installation also depends on your infrastructure and the services you configure.
+
+Arantic Digital is liable without limitation for intent, gross negligence, injury to life, body, or health, and liability that cannot be limited by law, including mandatory product liability. For slight negligence in breach of a material contractual obligation, liability is limited to damage that was foreseeable and typical of the contract, to the extent permitted by law. Other limitations apply only to the extent permitted by law. Mandatory consumer rights remain unaffected.
+
+9. Applicable Law and Consumer Rights
+
+The applicable-law and jurisdiction provisions in the BugPin Terms of Service at https://bugpin.io/terms/ apply to this agreement. Consumer withdrawal procedures are set out in those Terms and, for Paddle purchases, the Paddle Buyer Terms.
+
+10. Contact and Agreement Version
+
+For licensing questions, visit https://bugpin.io/contact/. This version is available at https://bugpin.io/eula/. Acceptance applies to this version. A later version is not accepted merely through automatic license renewal or publication of revised terms; any change is subject to the agreement process and applicable law.

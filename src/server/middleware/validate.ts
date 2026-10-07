@@ -1,9 +1,19 @@
 import type { MiddlewareHandler } from 'hono';
 import { z, ZodSchema } from 'zod';
-import { isValidUrl, normalizeUrl } from '../utils/validators.js';
-import { SUPPORTED_LOCALES } from '@shared/types';
+import { isValidUrl, normalizeUrl, themeColorsSchema } from '../utils/validators.js';
+import { SUPPORTED_LOCALES, type LocaleCode } from '@shared/types';
 
-const localeEnumValues = SUPPORTED_LOCALES as readonly [string, ...string[]];
+const webhookEventSchema = z.enum([
+  'report.created',
+  'report.updated',
+  'report.status_changed',
+  'report.assigned',
+  'report.resolved',
+  'report.closed',
+  'report.deleted',
+]);
+
+const localeEnumValues = SUPPORTED_LOCALES as readonly [LocaleCode, ...LocaleCode[]];
 
 const projectLanguageSchema = z.object({
   mode: z.enum(['auto', 'manual'], {
@@ -418,7 +428,7 @@ export const schemas = {
     name: z.string().min(1, 'Name is required'),
     url: z.string().url('Invalid URL'),
     secret: z.string().optional(),
-    events: z.array(z.string()).optional(),
+    events: z.array(webhookEventSchema).min(1).optional(),
   }),
 
   // Update webhook request
@@ -426,68 +436,130 @@ export const schemas = {
     name: z.string().min(1).optional(),
     url: z.string().url().optional(),
     secret: z.string().optional(),
-    events: z.array(z.string()).optional(),
+    events: z.array(webhookEventSchema).min(1).optional(),
     isActive: z.boolean().optional(),
   }),
 
   // Update settings request
-  updateSettings: z.object({
-    appName: z.string().min(1).max(100).optional(),
-    appUrl: z.string().optional(),
-    privacy: z
-      .object({
-        euPrivacyMode: z.boolean().optional(),
-      })
-      .strict()
-      .optional(),
-    widgetLauncherButton: widgetLauncherButtonGlobalSchema.optional(),
-    smtpEnabled: z.boolean().optional(),
-    smtpConfig: z
-      .object({
-        host: z.string().optional(),
-        port: z.number().int().min(1).max(65535).optional(),
-        user: z.string().optional(),
-        password: z.string().optional(),
-        from: z.string().optional(),
-      })
-      .optional(),
-    notifications: z
-      .object({
-        emailEnabled: z.boolean().optional(),
-        notifyOnNewReport: z.boolean().optional(),
-        notifyOnStatusChange: z.boolean().optional(),
-        notifyOnPriorityChange: z.boolean().optional(),
-        notifyOnAssignment: z.boolean().optional(),
-        notifyOnDeletion: z.boolean().optional(),
-      })
-      .optional(),
-    reporterNotifications: z
-      .object({
-        emailEnabled: z.boolean().optional(),
-        notifyOnNewReport: z.boolean().optional(),
-        notifyOnStatusChange: z.boolean().optional(),
-        notifyOnPriorityChange: z.boolean().optional(),
-        notifyOnAssignment: z.boolean().optional(),
-        messagingEnabled: z.boolean().optional(),
-      })
-      .optional(),
-    retentionDays: z.number().int().min(0).max(3650).optional(),
-    screenshot: z
-      .object({
-        useScreenCaptureAPI: z.boolean().optional(),
-        maxScreenshotSize: z.number().int().min(1).max(50).optional(),
-        maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-        maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
-      })
-      .optional(),
-    maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),
-    maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
-    maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
-    rateLimitPerMinute: z.number().int().min(1).max(1000).optional(),
-    sessionMaxAgeDays: z.number().int().min(1).max(365).optional(),
-    updateCheckEnabled: z.boolean().optional(),
-    language: projectLanguageSchema.optional(),
-  }),
+  updateSettings: z
+    .object({
+      invitationExpirationDays: z.number().int().min(1).max(365).optional(),
+      widgetDialog: themeColorsSchema.strict().optional(),
+      enforceHttps: z.boolean().optional(),
+      s3Enabled: z.boolean().optional(),
+      s3Config: z
+        .object({
+          bucket: z.string().optional(),
+          region: z.string().optional(),
+          accessKeyId: z.string().optional(),
+          secretAccessKey: z.string().optional(),
+          endpoint: z.string().optional(),
+        })
+        .strict()
+        .optional(),
+      branding: z
+        .object({
+          primaryColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+        })
+        .strict()
+        .optional(),
+      adminButton: z
+        .object({
+          lightButtonColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          lightTextColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          lightButtonHoverColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          lightTextHoverColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          darkButtonColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          darkTextColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          darkButtonHoverColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+          darkTextHoverColor: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional(),
+        })
+        .strict()
+        .optional(),
+      appName: z.string().min(1).max(100).optional(),
+      appUrl: z.string().optional(),
+      privacy: z
+        .object({
+          euPrivacyMode: z.boolean().optional(),
+        })
+        .strict()
+        .optional(),
+      widgetLauncherButton: widgetLauncherButtonGlobalSchema.optional(),
+      smtpEnabled: z.boolean().optional(),
+      smtpConfig: z
+        .object({
+          host: z.string().optional(),
+          port: z.number().int().min(1).max(65535).optional(),
+          user: z.string().optional(),
+          password: z.string().optional(),
+          from: z.string().optional(),
+        })
+        .optional(),
+      notifications: z
+        .object({
+          emailEnabled: z.boolean().optional(),
+          notifyOnNewReport: z.boolean().optional(),
+          notifyOnStatusChange: z.boolean().optional(),
+          notifyOnPriorityChange: z.boolean().optional(),
+          notifyOnAssignment: z.boolean().optional(),
+          notifyOnDeletion: z.boolean().optional(),
+        })
+        .optional(),
+      reporterNotifications: z
+        .object({
+          emailEnabled: z.boolean().optional(),
+          notifyOnNewReport: z.boolean().optional(),
+          notifyOnStatusChange: z.boolean().optional(),
+          notifyOnPriorityChange: z.boolean().optional(),
+          notifyOnAssignment: z.boolean().optional(),
+          messagingEnabled: z.boolean().optional(),
+        })
+        .optional(),
+      retentionDays: z.number().int().min(0).max(3650).optional(),
+      screenshot: z
+        .object({
+          useScreenCaptureAPI: z.boolean().optional(),
+          maxScreenshotSize: z.number().int().min(1).max(50).optional(),
+          maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
+          maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+        })
+        .optional(),
+      maxScreenshotSizeMb: z.number().int().min(1).max(50).optional(),
+      maxImageUploadSizeMb: z.number().int().min(1).max(50).optional(),
+      maxVideoUploadSizeMb: z.number().int().min(1).max(500).optional(),
+      rateLimitPerMinute: z.number().int().min(1).max(1000).optional(),
+      sessionMaxAgeDays: z.number().int().min(1).max(365).optional(),
+      updateCheckEnabled: z.boolean().optional(),
+      language: projectLanguageSchema.optional(),
+    })
+    .strict(),
 
   // Create integration request
   createIntegration: z.object({

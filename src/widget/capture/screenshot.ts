@@ -1,7 +1,6 @@
 import { toCanvas } from 'html-to-image';
 import { withCaptureClone } from './capture-clone';
 import { recordScrollbars } from './scrollbars';
-import { removeXmlUnsafeAttributes } from './xml-safe-serialization';
 
 type ToCanvasOptions = NonNullable<Parameters<typeof toCanvas>[1]>;
 
@@ -166,8 +165,7 @@ function shouldIncludeNode(node: Node): boolean {
 
 /**
  * Render `element` with html-to-image. BugPin's clone is prepared right before
- * serialization: its scrollbars match the live page and its attribute names are
- * valid XML.
+ * serialization so its scrollbars match the live page.
  */
 function renderToCanvas(
   element: HTMLElement,
@@ -178,10 +176,7 @@ function renderToCanvas(
   const scrollbars = recordScrollbars(element, rootSizeLocked);
   return withCaptureClone(
     element,
-    (svg, cloneRoot) => {
-      scrollbars.apply(cloneRoot);
-      removeXmlUnsafeAttributes(svg);
-    },
+    (_svg, cloneRoot) => scrollbars.apply(cloneRoot),
     (style) => toCanvas(element, { ...options, style, filter: scrollbars.observe(options.filter) })
   );
 }

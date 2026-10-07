@@ -1,3 +1,4 @@
+import { withEffectiveBranding } from '../utils/effective-branding.js';
 import nodemailer from 'nodemailer';
 import { settingsCacheService } from './settings-cache.service.js';
 import { logger } from '../utils/logger.js';
@@ -70,7 +71,7 @@ async function loadOverridesFromEE(): Promise<CustomEmailTemplates | undefined> 
 export const emailService = {
   async appendFooter(html: string, type: EmailTemplateType): Promise<string> {
     const whiteLabel = await getEEHooks().getWhiteLabelService()?.getConfig();
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     let branded = appendFooterToHtml(html, type, whiteLabel);
     if (settings.branding?.logoLightUrl && settings.appUrl) {
       try {
@@ -109,7 +110,7 @@ export const emailService = {
   async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; error?: string }> {
     try {
       // Load SMTP settings
-      const settings = await settingsCacheService.getAll();
+      const settings = withEffectiveBranding(await settingsCacheService.getAll());
 
       logger.debug('sendEmail called', {
         recipientCount: options.to.length,
@@ -219,7 +220,7 @@ export const emailService = {
     data: ReportEmailData
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl } = data;
 
     const template = await this.getTemplate('newReport', teamLocale);
@@ -267,7 +268,7 @@ export const emailService = {
     data: ReportEmailData & { oldStatus: string; newStatus: string }
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl, oldStatus, newStatus } = data;
 
     const template = await this.getTemplate('statusChange', teamLocale);
@@ -313,7 +314,7 @@ export const emailService = {
     data: ReportEmailData & { oldPriority: string; newPriority: string }
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl, oldPriority, newPriority } = data;
 
     const template = await this.getTemplate('priorityChange', teamLocale);
@@ -359,7 +360,7 @@ export const emailService = {
     data: ReportEmailData
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName } = data;
 
     const template = await this.getTemplate('reportDeleted', teamLocale);
@@ -404,7 +405,7 @@ export const emailService = {
     data: ReportEmailData & { assignedToName: string; assignedToEmail?: string }
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl, assignedToName, assignedToEmail } = data;
 
     const template = await this.getTemplate('assignment', teamLocale);
@@ -454,7 +455,7 @@ export const emailService = {
       appUrl: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -508,7 +509,7 @@ export const emailService = {
       reporterMessage?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, oldStatus, newStatus, reporterMessage } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -564,7 +565,7 @@ export const emailService = {
       newPriority: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, oldPriority, newPriority } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -618,7 +619,7 @@ export const emailService = {
       previousAssigneeName?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, assigneeName, previousAssigneeName } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -676,7 +677,7 @@ export const emailService = {
       message: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, senderName, message } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -730,7 +731,7 @@ export const emailService = {
       message: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, senderName, message } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -778,7 +779,7 @@ export const emailService = {
     recipient: EmailRecipient,
     data: { inviteUrl: string; inviterName: string; expiresInDays: number }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const appName = settings.appName || 'BugPin';
 
     const template = await this.getTemplate('invitation', 'en');
@@ -840,7 +841,7 @@ export const emailService = {
       await transporter.verify();
 
       // Get template and compile
-      const settings = await settingsCacheService.getAll();
+      const settings = withEffectiveBranding(await settingsCacheService.getAll());
       const resolvedAppName = appName || settings.appName || 'BugPin';
       const template = await this.getTemplate('testEmail', 'en');
       const templateData = {

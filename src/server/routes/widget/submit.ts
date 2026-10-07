@@ -1,3 +1,4 @@
+import { withEffectiveBranding } from '../../utils/effective-branding.js';
 import { getEEHooks } from '../../utils/ee-hooks.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -380,7 +381,7 @@ widget.get('/config/:apiKey', async (c) => {
       500
     );
   }
-  const appSettings = settingsResult.value;
+  const appSettings = withEffectiveBranding(settingsResult.value);
 
   // Get branding primary color
   const brandingPrimaryColor = appSettings.branding.primaryColor;

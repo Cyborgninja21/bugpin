@@ -1,3 +1,5 @@
+import { checkProjectLicense } from '../../utils/project-license.js';
+import { integrationsRepo } from '../../database/repositories/integrations.repo.js';
 import { githubSyncService } from './github-sync.service.js';
 import { reportsRepo } from '../../database/repositories/reports.repo.js';
 import { logger } from '../../utils/logger.js';
@@ -33,12 +35,20 @@ export const syncQueueService = {
   /**
    * Add a report to the sync queue
    */
-  async enqueue(reportId: string, integrationId: string): Promise<void> {
+  async enqueue(reportId: string, integrationId: string): Promise<Result<void>> {
+    const report = await reportsRepo.findById(reportId);
+    if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+    const integration = await integrationsRepo.findById(integrationId);
+    if (!integration) return Result.fail('Integration not found', 'NOT_FOUND');
+    if (report.projectId !== integration.projectId)
+      return Result.fail('Integration does not belong to this project', 'PROJECT_MISMATCH');
+    const access = checkProjectLicense(report.projectId);
+    if (!access.success) return access;
     // Check if already in queue
     const existing = queue.find((t) => t.reportId === reportId);
     if (existing) {
       logger.debug('Report already in sync queue', { reportId });
-      return;
+      return Result.ok(undefined);
     }
 
     const task: SyncTask = {
@@ -56,6 +66,7 @@ export const syncQueueService = {
     await reportsRepo.markPendingSync(reportId);
 
     logger.info('Added report to sync queue', { reportId, integrationId });
+    return Result.ok(undefined);
   },
 
   /**
@@ -204,9 +215,6 @@ export const syncQueueService = {
    * Retry sync for a specific report (validates integration exists)
    */
   async retrySyncForReport(reportId: string): Promise<Result<void>> {
-    // Import here to avoid circular dependency issues
-    const { integrationsRepo } = await import('../../database/repositories/integrations.repo.js');
-
     // Get report
     const report = await reportsRepo.findById(reportId);
     if (!report) {
@@ -222,8 +230,6 @@ export const syncQueueService = {
     }
 
     // Queue for sync
-    await this.enqueue(reportId, githubIntegration.id);
-
-    return Result.ok(undefined);
+    return this.enqueue(reportId, githubIntegration.id);
   },
 };

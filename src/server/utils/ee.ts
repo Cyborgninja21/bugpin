@@ -134,10 +134,15 @@ export async function initializeEE(): Promise<void> {
   try {
     if (!plugin.isLicensed()) {
       const storedKey = await settingsRepo.get<string>('ee:license_key');
-      if (storedKey && (await settingsRepo.get<string>('ee:license_revoked_key')) !== storedKey) {
+      if (storedKey) {
         const licenseService = getEELicenseService();
         if (licenseService) {
-          const result = await licenseService.validateAndStore(storedKey);
+          const result = await licenseService.validateAndStore(storedKey, true);
+          if (
+            result.valid &&
+            (await settingsRepo.get<string>('ee:license_revoked_key')) === storedKey
+          )
+            licenseService.markInactive();
           if (result.valid) {
             logger.info('License restored from database');
           } else {
@@ -227,17 +232,12 @@ export function getLicenseStatus() {
     };
   }
 
-  if (!licenseService.isValid()) {
-    return {
-      eeAvailable: true,
-      licensed: false,
-      message: 'License expired',
-    };
-  }
-
+  const valid = licenseService.isValid();
   return {
     eeAvailable: true,
-    licensed: true,
+    installed: true,
+    licensed: valid,
+    ...(!valid ? { message: licenseService.getStatus().error ?? 'License inactive' } : {}),
     ...getEEProjectLicenseService()?.getStatus(),
     plan: license.plan,
     customerName: license.customerName,

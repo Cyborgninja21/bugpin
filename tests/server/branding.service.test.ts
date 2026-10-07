@@ -1,3 +1,5 @@
+import { getEELicenseService } from '../../src/server/utils/ee';
+const licenseService = getEELicenseService()!;
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'bun:test';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
 import { logger } from '../../src/server/utils/logger';
@@ -6,6 +8,7 @@ let brandingService: typeof import('../../src/server/services/branding.service')
 
 const originalSettingsRepo = { ...settingsRepo };
 const originalLogger = { ...logger };
+const originalHasFeature = licenseService.hasFeature;
 
 let updateNestedCalls: Array<{ key: string; payload: unknown }> = [];
 
@@ -15,6 +18,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  licenseService.hasFeature = () => true;
   updateNestedCalls = [];
 
   settingsRepo.updateNested = async (key, payload) => {
@@ -61,6 +65,7 @@ beforeEach(() => {
 afterEach(() => {
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(logger, originalLogger);
+  licenseService.hasFeature = originalHasFeature;
 });
 
 describe('brandingService.getBrandingConfig', () => {

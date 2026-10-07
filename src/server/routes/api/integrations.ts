@@ -391,7 +391,9 @@ integrations.post(
 
     // Queue reports for sync
     for (const reportId of reportIds) {
-      await syncQueueService.enqueue(reportId, id);
+      const result = await syncQueueService.enqueue(reportId, id);
+      if (!result.success)
+        return c.json({ success: false, error: result.code, message: result.error }, 400);
     }
 
     return c.json({

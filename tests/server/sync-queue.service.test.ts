@@ -1,3 +1,7 @@
+import { integrationsRepo } from '../../src/server/database/repositories/integrations.repo';
+import { getEEProjectLicenseService } from '../../src/server/utils/ee';
+const projectLicenseService = getEEProjectLicenseService()!;
+import type { Report, Integration } from '../../src/shared/types';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { syncQueueService } from '../../src/server/services/integrations/sync-queue.service';
 import { githubSyncService } from '../../src/server/services/integrations/github-sync.service';
@@ -8,6 +12,8 @@ import { logger } from '../../src/server/utils/logger';
 const originalGithubSyncService = { ...githubSyncService };
 const originalReportsRepo = { ...reportsRepo };
 const originalLogger = { ...logger };
+const originalIntegrationsRepo = { ...integrationsRepo };
+const originalCheckAccess = projectLicenseService.checkAccess;
 
 let markPendingIds: string[] = [];
 let syncResult = Result.ok({
@@ -18,6 +24,9 @@ let syncResult = Result.ok({
 });
 
 beforeEach(() => {
+  reportsRepo.findById = async (id) => ({ id, projectId: 'prj_1' }) as Report;
+  integrationsRepo.findById = async (id) => ({ id, projectId: 'prj_1' }) as Integration;
+  projectLicenseService.checkAccess = () => Result.ok(undefined);
   markPendingIds = [];
   syncResult = Result.ok({
     reportId: 'rpt_1',
@@ -45,6 +54,8 @@ afterEach(() => {
   Object.assign(githubSyncService, originalGithubSyncService);
   Object.assign(reportsRepo, originalReportsRepo);
   Object.assign(logger, originalLogger);
+  Object.assign(integrationsRepo, originalIntegrationsRepo);
+  projectLicenseService.checkAccess = originalCheckAccess;
   syncQueueService.clear();
 });
 
@@ -115,4 +126,19 @@ describe('syncQueueService', () => {
     globalThis.setInterval = originalSetInterval;
     globalThis.clearInterval = originalClearInterval;
   });
+});
+
+it('does not queue or mutate a locked report or one belonging to another integration', async () => {
+  projectLicenseService.checkAccess = () => Result.fail('Locked', 'PROJECT_NOT_LICENSED');
+  const locked = await syncQueueService.enqueue('rpt_1', 'int_1');
+  expect(locked.success).toBe(false);
+  expect(markPendingIds).toEqual([]);
+  expect(syncQueueService.getStatus().queueLength).toBe(0);
+  projectLicenseService.checkAccess = () => Result.ok(undefined);
+  integrationsRepo.findById = async (id) => ({ id, projectId: 'prj_other' }) as Integration;
+  const mismatched = await syncQueueService.enqueue('rpt_1', 'int_1');
+  expect(mismatched.success).toBe(false);
+  if (!mismatched.success) expect(mismatched.code).toBe('PROJECT_MISMATCH');
+  expect(markPendingIds).toEqual([]);
+  expect(syncQueueService.getStatus().queueLength).toBe(0);
 });

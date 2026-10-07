@@ -80,12 +80,26 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const { data: config, isLoading } = useQuery({
     queryKey: ['branding-config'],
     queryFn: brandingApi.getConfig,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   // Apply admin colors when config changes or theme changes
   useEffect(() => {
     if (!config) return;
+
+    document.documentElement.style.setProperty('--color-primary-brand', config.primaryColor);
+    for (const link of document.querySelectorAll<HTMLLinkElement>(
+      'link[rel="icon"], link[rel="apple-touch-icon"], link[rel="manifest"]'
+    )) {
+      const url = new URL(link.href);
+      if (url.origin !== location.origin || !url.pathname.startsWith('/branding/')) continue;
+      const version = url.pathname.includes('/light/')
+        ? config.faviconLightVersion
+        : config.faviconDarkVersion;
+      url.searchParams.set('v', version);
+      if (link.href !== url.href) link.href = url.href;
+    }
 
     // Check current theme
     const isDark = document.documentElement.classList.contains('dark');

@@ -134,7 +134,8 @@ app.post('/activate', authMiddleware, authorize(['admin']), requireLicenseAgreem
           success: false,
           error: activation.code,
           message: activation.error,
-          projectLimit: result.license?.seats,
+          projectLimit:
+            'projectLimit' in activation ? activation.projectLimit : result.license?.seats,
           projects: available.success ? available.value.map(({ id, name }) => ({ id, name })) : [],
         },
         400

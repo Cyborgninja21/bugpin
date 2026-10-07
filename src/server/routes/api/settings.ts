@@ -1,3 +1,4 @@
+import { withEffectiveBranding } from '../../utils/effective-branding.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { settingsService } from '../../services/settings.service.js';
@@ -189,7 +190,7 @@ settings.post(
         return c.json({ success: false, error: result.code, message: result.error }, 400);
       }
 
-      const settings = result.value;
+      const settings = withEffectiveBranding(result.value);
       const sampleData = getSampleDataForTemplate(
         type as EmailTemplateType,
         settings.appName,
@@ -265,7 +266,7 @@ settings.post(
         return c.json({ success: false, error: result.code, message: result.error }, 400);
       }
 
-      const appSettings = result.value;
+      const appSettings = withEffectiveBranding(result.value);
 
       // Check if SMTP is configured
       if (!appSettings.smtpEnabled) {

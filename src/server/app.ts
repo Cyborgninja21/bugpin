@@ -1,3 +1,4 @@
+import { hasEEFeature } from './utils/ee.js';
 import { settingsRepo } from './database/repositories/settings.repo.js';
 import { Hono, Context, Next } from 'hono';
 import { cors } from 'hono/cors';
@@ -163,8 +164,6 @@ export function createApp(): Hono {
 
     return c.json({ success: false, error: 'NOT_FOUND', message: 'File not found' }, 404);
   };
-  app.all('/admin', serveAdmin);
-  app.all('/admin/*', serveAdmin);
 
   // Serve branding files (favicons, manifest, etc.)
   // Checks custom uploads first, then falls back to default branding assets
@@ -215,34 +214,35 @@ export function createApp(): Hono {
     };
     const contentType = contentTypes[ext || ''] || 'application/octet-stream';
 
-    // Try custom uploads first
-    let customPath = `${config.brandingDir}/${filePath}`;
-    const [mode, asset, extra] = filePath.split('/');
-    if (
-      !extra &&
-      (mode === 'light' || mode === 'dark') &&
-      /^(favicon-|apple-touch-icon-|android-chrome-)/.test(asset ?? '')
-    ) {
-      const settings = await settingsRepo.getAll();
-      const version =
-        mode === 'light'
-          ? settings.branding.faviconLightVersion
-          : settings.branding.faviconDarkVersion;
-      if (/^[0-9a-f-]{36}$/.test(version))
-        customPath = `${config.brandingDir}/${mode}/favicons-${version}/${asset}`;
-    }
-    try {
-      const customFile = Bun.file(customPath);
-      if (await customFile.exists()) {
-        return new Response(customFile, {
-          headers: {
-            'Content-Type': contentType,
-            'Cache-Control': 'no-cache',
-          },
-        });
+    if (hasEEFeature('custom-branding')) {
+      let customPath = `${config.brandingDir}/${filePath}`;
+      const [mode, asset, extra] = filePath.split('/');
+      if (
+        !extra &&
+        (mode === 'light' || mode === 'dark') &&
+        /^(favicon-|apple-touch-icon-|android-chrome-)/.test(asset ?? '')
+      ) {
+        const settings = await settingsRepo.getAll();
+        const version =
+          mode === 'light'
+            ? settings.branding.faviconLightVersion
+            : settings.branding.faviconDarkVersion;
+        if (/^[0-9a-f-]{36}$/.test(version))
+          customPath = `${config.brandingDir}/${mode}/favicons-${version}/${asset}`;
       }
-    } catch {
-      // Custom file not found, try default
+      try {
+        const customFile = Bun.file(customPath);
+        if (await customFile.exists()) {
+          return new Response(customFile, {
+            headers: {
+              'Content-Type': contentType,
+              'Cache-Control': 'no-cache',
+            },
+          });
+        }
+      } catch {
+        // Custom file not found, try default
+      }
     }
 
     // Fallback to default branding assets
@@ -265,6 +265,8 @@ export function createApp(): Hono {
   };
   app.get('/branding/*', serveBranding);
   app.get('/admin/branding/*', serveBranding);
+  app.all('/admin', serveAdmin);
+  app.all('/admin/*', serveAdmin);
 
   // Serve widget script
   app.get('/widget.js', async (c) => {

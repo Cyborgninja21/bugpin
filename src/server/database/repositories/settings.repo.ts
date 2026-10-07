@@ -83,7 +83,7 @@ const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
   notifyOnDeletion: true,
 };
 
-const DEFAULT_BRANDING: BrandingSettings = {
+export const DEFAULT_BRANDING: BrandingSettings = {
   primaryColor: '#02658D',
   logoLightUrl: null,
   logoDarkUrl: null,
@@ -111,7 +111,7 @@ const DEFAULT_PRIVACY: PrivacySettings = {
   euPrivacyMode: false,
 };
 
-const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
+export const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
   lightButtonColor: '#02658D',
   lightTextColor: '#ffffff',
   lightButtonHoverColor: '#024F6F',

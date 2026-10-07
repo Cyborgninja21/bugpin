@@ -1,3 +1,4 @@
+import { withEffectiveBranding } from '../utils/effective-branding.js';
 import { getEEHooks } from '../utils/ee-hooks.js';
 import type { WhiteLabelConfig } from '../types/ee-plugin.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
@@ -40,7 +41,7 @@ export const brandingService = {
    */
   async getBrandingConfig(): Promise<Result<BrandingConfig>> {
     try {
-      const settings = await settingsRepo.getAll();
+      const settings = withEffectiveBranding(await settingsRepo.getAll());
 
       const config: BrandingConfig = {
         whiteLabel: await getEEHooks().getWhiteLabelService()?.getConfig(),

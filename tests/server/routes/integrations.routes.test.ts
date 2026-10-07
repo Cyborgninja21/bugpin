@@ -143,6 +143,7 @@ beforeEach(() => {
 
   syncQueueService.enqueue = async (reportId, integrationId) => {
     queuedReports.push({ reportId, integrationId });
+    return Result.ok(undefined);
   };
   syncQueueService.getStatus = () => ({
     queueLength: queuedReports.length,

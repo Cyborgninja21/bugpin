@@ -38,7 +38,7 @@ RUN bun run build:admin && bun run build:widget
 
 # Build EE module (compile TypeScript to JavaScript) if submodule is present
 # Create stub files for CE-only builds so COPY commands don't fail
-RUN if [ -d "ee/src" ]; then bun run --cwd ee check; fi && \
+RUN if [ -d "ee/src" ]; then bun run check:ee; fi && \
     mkdir -p ee/dist && \
     (test -f ee/package.json || echo '{}' > ee/package.json) && \
     (test -f ee/tsconfig.json || echo '{}' > ee/tsconfig.json)

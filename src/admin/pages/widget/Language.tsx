@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
@@ -39,9 +39,6 @@ const LOCALE_DISPLAY_LABELS: Record<LocaleCode, string> = {
 };
 
 export function Language() {
-  const queryClient = useQueryClient();
-  const [language, setLanguage] = useState<ProjectLanguageSettings>(DEFAULT_LANGUAGE);
-
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
@@ -50,11 +47,25 @@ export function Language() {
     },
   });
 
-  useEffect(() => {
-    if (settings?.language) {
-      setLanguage(settings.language);
-    }
-  }, [settings]);
+  if (isLoading) {
+    return (
+      <Card className="max-w-4xl">
+        <CardContent className="py-12">
+          <Spinner className="mx-auto text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <LanguageForm initialLanguage={settings?.language ?? DEFAULT_LANGUAGE} />;
+}
+
+// Mounted only once settings are loaded: the Radix Select must receive the stored value on
+// its first render. Changing its value programmatically after mount (e.g. syncing state in a
+// useEffect) makes its hidden native <select> emit onValueChange('') and clears the selection.
+function LanguageForm({ initialLanguage }: { initialLanguage: ProjectLanguageSettings }) {
+  const queryClient = useQueryClient();
+  const [language, setLanguage] = useState<ProjectLanguageSettings>(initialLanguage);
 
   const mutation = useMutation({
     mutationFn: async (data: Partial<AppSettings>) => {
@@ -74,16 +85,6 @@ export function Language() {
     e.preventDefault();
     mutation.mutate({ language });
   };
-
-  if (isLoading) {
-    return (
-      <Card className="max-w-4xl">
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card className="max-w-4xl">

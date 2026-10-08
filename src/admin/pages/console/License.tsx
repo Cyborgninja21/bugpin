@@ -193,7 +193,7 @@ export function License() {
     });
   };
 
-  if (statusError) {
+  if (statusError && !status) {
     return (
       <Card className="max-w-4xl">
         <CardHeader>
@@ -223,6 +223,8 @@ export function License() {
     );
   }
 
+  const statusMessage = status?.message?.trim() || 'License inactive';
+  const statusDescription = `${statusMessage}${/[.!?]$/.test(statusMessage) ? '' : '.'} Enterprise features are disabled.`;
   const isLicensed = status?.licensed ?? false;
   const expiresDate = status?.expiresAt ? new Date(status.expiresAt) : null;
   const neverExpires = expiresDate ? expiresDate.getFullYear() >= 9999 : false;
@@ -233,6 +235,15 @@ export function License() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {statusError && (
+        <div className="space-y-2">
+          <p role="alert">Could not refresh license status. Showing the last loaded status.</p>
+          <Button variant="outline" onClick={() => void refetchStatus()} disabled={isFetching}>
+            {isFetching && <Spinner size="sm" />}
+            Retry
+          </Button>
+        </div>
+      )}
       {/* Current License Status */}
       <Card>
         <CardHeader>
@@ -244,7 +255,7 @@ export function License() {
             {isLicensed
               ? 'Your Enterprise license is active'
               : status?.installed
-                ? `${status.message}. Enterprise features are disabled.`
+                ? statusDescription
                 : 'Enter your license key to unlock Enterprise features'}
           </CardDescription>
         </CardHeader>
@@ -475,7 +486,7 @@ export function License() {
                 />
               </div>
               <div className="flex items-center gap-4">
-                <Button type="submit" disabled={activateMutation.isPending}>
+                <Button type="submit" disabled={activateMutation.isPending || statusError}>
                   {activateMutation.isPending && <Spinner size="sm" className="mr-2" />}
                   Activate License
                 </Button>

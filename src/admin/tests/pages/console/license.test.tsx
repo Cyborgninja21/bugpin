@@ -50,8 +50,8 @@ it('recovers the activated card after a failed status refresh without requiring 
   await user.click(screen.getByRole('button', { name: 'Activate License' }));
   await user.click(screen.getByRole('checkbox'));
   await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load license status');
-  expect(screen.queryByRole('button', { name: 'Activate License' })).not.toBeInTheDocument();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not refresh license status');
+  expect(screen.getByRole('button', { name: 'Activate License' })).toBeDisabled();
   view.rerender(<div>Another page</div>);
   view.rerender(<License />);
   expect(await screen.findByRole('alert')).toBeInTheDocument();
@@ -411,4 +411,57 @@ it('requires agreement acceptance before activation, resets on dismissal, and pr
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
   complete();
   await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+});
+
+it('keeps the loaded license visible after a background refresh fails', async () => {
+  vi.spyOn(licenseApi, 'getStatus')
+    .mockResolvedValueOnce({ eeAvailable: true, installed: true, licensed: true })
+    .mockRejectedValue(new Error('Offline'));
+  const { queryClient } = renderWithQuery(<License />);
+  const card = await screen.findByText('Licensed');
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey: ['license-status'] });
+  });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not refresh license status');
+  expect(screen.getByText('Licensed')).toBe(card);
+  expect(screen.getByRole('button', { name: 'Remove License' })).toBeInTheDocument();
+});
+
+it('keeps the agreement dialog and input mounted after a background refresh fails', async () => {
+  vi.spyOn(licenseApi, 'getStatus')
+    .mockResolvedValueOnce({ eeAvailable: true, installed: false, licensed: false })
+    .mockRejectedValue(new Error('Offline'));
+  const user = userEvent.setup();
+  const { queryClient } = renderWithQuery(<License />);
+  const input = await screen.findByRole('textbox', { name: 'License Key' });
+  await user.type(input, 'test-license');
+  await user.click(screen.getByRole('button', { name: 'Activate License' }));
+  const dialog = screen.getByRole('alertdialog');
+  const checkbox = screen.getByRole('checkbox');
+  await user.click(checkbox);
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey: ['license-status'] });
+  });
+  await waitFor(() => expect(queryClient.getQueryState(['license-status'])?.status).toBe('error'));
+  expect(screen.getByRole('alertdialog')).toBe(dialog);
+  expect(input).toBeInTheDocument();
+  expect(input).toHaveValue('test-license');
+  expect(checkbox).toBeChecked();
+});
+
+it.each([
+  ['License inactive', 'License inactive.'],
+  ['Verification will retry automatically.', 'Verification will retry automatically.'],
+  ['Try again! ', 'Try again!'],
+])('uses one sentence ending for status %s', async (message, expected) => {
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
+    eeAvailable: true,
+    installed: true,
+    licensed: false,
+    message,
+  });
+  renderWithQuery(<License />);
+  expect(
+    await screen.findByText(`${expected} Enterprise features are disabled.`)
+  ).toBeInTheDocument();
 });

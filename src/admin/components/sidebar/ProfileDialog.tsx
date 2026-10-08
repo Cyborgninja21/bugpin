@@ -17,6 +17,7 @@ import { Badge } from '../ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -36,20 +37,17 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-2xl max-h-[90vh] overflow-y-auto"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
+      <DialogContent className="max-w-2xl max-h-[90vh]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Profile Settings</DialogTitle>
           <DialogDescription>Manage your account, appearance, and password</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <DialogBody contentClassName="space-y-6 py-4 px-6">
           <ProfileSection user={user} />
           <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
           <ChangePasswordSection />
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

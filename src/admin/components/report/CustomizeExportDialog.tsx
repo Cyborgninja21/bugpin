@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Report } from '@shared/types';
+import { ScrollArea } from '../ui/scroll-area';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import {
@@ -123,7 +124,10 @@ export function CustomizeExportDialog({
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:gap-6">
-          <div className="flex shrink-0 flex-col gap-3 overflow-y-auto md:w-80">
+          <ScrollArea
+            className="flex-1 md:flex-none md:w-80"
+            contentClassName="flex flex-col gap-3"
+          >
             <div>
               <Label className="text-xs uppercase text-muted-foreground">Format</Label>
               <Tabs
@@ -198,7 +202,7 @@ export function CustomizeExportDialog({
                 />
               </div>
             </div>
-          </div>
+          </ScrollArea>
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 items-center justify-between">

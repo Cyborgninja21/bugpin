@@ -119,12 +119,12 @@ describe('projectsRepo', () => {
     expect(all).toHaveLength(1);
   });
 
-  it('applies default language settings on read when missing', async () => {
+  it('leaves language unset when the project has no override', async () => {
     const project = await projectsRepo.create({ name: 'NoLanguage' });
-    expect(project.settings.language).toEqual({ mode: 'auto', defaultLanguage: 'en' });
+    expect(project.settings.language).toBeUndefined();
 
     const fetched = await projectsRepo.findById(project.id);
-    expect(fetched?.settings.language).toEqual({ mode: 'auto', defaultLanguage: 'en' });
+    expect(fetched?.settings.language).toBeUndefined();
   });
 
   it('preserves stored language settings on read when present', async () => {

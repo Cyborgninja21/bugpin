@@ -120,7 +120,8 @@ export function ProjectSettingsDialog({
   const [useCustomWhitelist, setUseCustomWhitelist] = useState(false);
   const [whitelistSettings, setWhitelistSettings] = useState<string[]>([]);
 
-  // Language settings state
+  // Language settings state (no override = inherit the instance-wide language)
+  const [useCustomLanguage, setUseCustomLanguage] = useState(false);
   const [languageSettings, setLanguageSettings] =
     useState<ProjectLanguageSettings>(DEFAULT_PROJECT_LANGUAGE);
 
@@ -223,7 +224,9 @@ export function ProjectSettingsDialog({
       setDefaultAssigneeUserId(projectDetail.settings?.defaultAssigneeUserId ?? null);
 
       // Language settings
-      setLanguageSettings(projectDetail.settings?.language ?? DEFAULT_PROJECT_LANGUAGE);
+      const projectLanguage = projectDetail.settings?.language;
+      setUseCustomLanguage(!!projectLanguage);
+      setLanguageSettings(projectLanguage ?? DEFAULT_PROJECT_LANGUAGE);
     }
   }, [projectDetail]);
 
@@ -336,8 +339,8 @@ export function ProjectSettingsDialog({
 
       newSettings.defaultAssigneeUserId = defaultAssigneeUserId;
 
-      // Language settings
-      newSettings.language = languageSettings;
+      // Language settings: null clears the override so the global language applies
+      newSettings.language = useCustomLanguage ? languageSettings : null;
 
       // Save project settings
       await projectMutation.mutateAsync({
@@ -677,63 +680,90 @@ export function ProjectSettingsDialog({
               {/* Language Tab */}
               <TabsContent value="language" className="mt-0">
                 <div className="space-y-5 rounded-xl border bg-card p-5">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Language Mode</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Auto detects each visitor's language from the page or browser; manual locks
-                      the widget and reporter emails to one language for every report.
-                    </p>
+                  <div className="flex items-center justify-between pb-3 border-b">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="use-custom-language" className="text-sm font-medium">
+                        Use Custom Settings
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Enable individual language settings for this project
+                      </p>
+                    </div>
+                    <Switch
+                      id="use-custom-language"
+                      checked={useCustomLanguage}
+                      onCheckedChange={(checked) => {
+                        setUseCustomLanguage(checked);
+                        if (checked) {
+                          // Start the override from the current global language
+                          setLanguageSettings(globalSettings?.language ?? DEFAULT_PROJECT_LANGUAGE);
+                        }
+                      }}
+                    />
                   </div>
-                  <div role="radiogroup" aria-label="Language mode" className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant={languageSettings.mode === 'auto' ? 'default' : 'outline'}
-                      role="radio"
-                      aria-checked={languageSettings.mode === 'auto'}
-                      onClick={() => setLanguageSettings({ ...languageSettings, mode: 'auto' })}
-                    >
-                      Auto-detect
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={languageSettings.mode === 'manual' ? 'default' : 'outline'}
-                      role="radio"
-                      aria-checked={languageSettings.mode === 'manual'}
-                      onClick={() => setLanguageSettings({ ...languageSettings, mode: 'manual' })}
-                    >
-                      Manual (locked)
-                    </Button>
-                  </div>
+                  {useCustomLanguage && (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-sm font-medium">Language Mode</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Auto detects each visitor's language from the page or browser; manual
+                          locks the widget and reporter emails to one language for every report.
+                        </p>
+                      </div>
+                      <div role="radiogroup" aria-label="Language mode" className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant={languageSettings.mode === 'auto' ? 'default' : 'outline'}
+                          role="radio"
+                          aria-checked={languageSettings.mode === 'auto'}
+                          onClick={() => setLanguageSettings({ ...languageSettings, mode: 'auto' })}
+                        >
+                          Auto-detect
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={languageSettings.mode === 'manual' ? 'default' : 'outline'}
+                          role="radio"
+                          aria-checked={languageSettings.mode === 'manual'}
+                          onClick={() =>
+                            setLanguageSettings({ ...languageSettings, mode: 'manual' })
+                          }
+                        >
+                          Manual (locked)
+                        </Button>
+                      </div>
 
-                  <div className="space-y-2 pt-2">
-                    <Label htmlFor="default-language" className="text-sm font-medium">
-                      Default Language
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      In auto mode this is the fallback when detection finds no supported match. In
-                      manual mode this is the locked language used for every report.
-                    </p>
-                    <Select
-                      value={languageSettings.defaultLanguage}
-                      onValueChange={(val) =>
-                        setLanguageSettings({
-                          ...languageSettings,
-                          defaultLanguage: val as LocaleCode,
-                        })
-                      }
-                    >
-                      <SelectTrigger id="default-language" className="h-11 max-w-xl">
-                        <SelectValue placeholder="Select default language" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SUPPORTED_LOCALES.map((code) => (
-                          <SelectItem key={code} value={code}>
-                            {LOCALE_DISPLAY_LABELS[code]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <div className="space-y-2 pt-2">
+                        <Label htmlFor="default-language" className="text-sm font-medium">
+                          Default Language
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          In auto mode this is the fallback when detection finds no supported match.
+                          In manual mode this is the locked language used for every report.
+                        </p>
+                        <Select
+                          value={languageSettings.defaultLanguage}
+                          onValueChange={(val) =>
+                            setLanguageSettings({
+                              ...languageSettings,
+                              defaultLanguage: val as LocaleCode,
+                            })
+                          }
+                        >
+                          <SelectTrigger id="default-language" className="h-11 max-w-xl">
+                            <SelectValue placeholder="Select default language" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SUPPORTED_LOCALES.map((code) => (
+                              <SelectItem key={code} value={code}>
+                                {LOCALE_DISPLAY_LABELS[code]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
                 </div>
               </TabsContent>
             </DialogBody>

@@ -2,12 +2,7 @@ import { getDb } from '../database.js';
 import { generateId, generateApiKey } from '../../utils/id.js';
 import { hashApiKey } from '../../utils/crypto.js';
 import type { CreateProjectData } from './interfaces.js';
-import type {
-  Project,
-  ProjectLanguageSettings,
-  ProjectSettings,
-  WidgetLauncherButtonSettings,
-} from '@shared/types';
+import type { Project, ProjectSettings, WidgetLauncherButtonSettings } from '@shared/types';
 import {
   wrapLegacyLocalizedString,
   wrapLegacyTooltipText,
@@ -32,11 +27,6 @@ interface ProjectRow {
 
 // Row to Entity Mapping
 
-const DEFAULT_PROJECT_LANGUAGE_SETTINGS: ProjectLanguageSettings = {
-  mode: 'auto',
-  defaultLanguage: 'en',
-};
-
 function applyLauncherButtonLegacyWrap(
   launcher: WidgetLauncherButtonSettings | undefined
 ): WidgetLauncherButtonSettings | undefined {
@@ -53,9 +43,6 @@ function applyLauncherButtonLegacyWrap(
 
 function applySettingsDefaults(settings: ProjectSettings): ProjectSettings {
   const next: ProjectSettings = { ...settings };
-  if (!next.language) {
-    next.language = { ...DEFAULT_PROJECT_LANGUAGE_SETTINGS };
-  }
   if (next.widgetLauncherButton) {
     next.widgetLauncherButton = applyLauncherButtonLegacyWrap(next.widgetLauncherButton);
   }

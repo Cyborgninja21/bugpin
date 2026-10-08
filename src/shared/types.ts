@@ -240,7 +240,8 @@ export interface ProjectSettings {
   defaultAssigneeUserId?: string | null;
   widgetLauncherButton?: WidgetLauncherButtonSettings;
   widgetDialog?: WidgetDialogSettings;
-  language?: ProjectLanguageSettings;
+  // Missing or null: inherit the instance-wide language setting. null clears an override on PATCH.
+  language?: ProjectLanguageSettings | null;
   screenshot?: ScreenshotSettings;
   activityCapture?: boolean;
   consoleCapture?: boolean;

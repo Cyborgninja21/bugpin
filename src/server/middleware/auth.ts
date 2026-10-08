@@ -1,6 +1,8 @@
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { authService } from '../services/auth.service.js';
+import { getEEHooks } from '../utils/ee-hooks.js';
+import type { ApiTokenValidationResult } from '../types/ee-plugin.js';
 import type { User, Session } from '@shared/types';
 
 // Types
@@ -10,6 +12,7 @@ declare module 'hono' {
   interface ContextVariableMap {
     user: User;
     session: Session;
+    apiToken: ApiTokenValidationResult;
   }
 }
 
@@ -17,28 +20,52 @@ declare module 'hono' {
 
 /**
  * Authentication middleware
- * Validates session cookie and sets user in context
+ * Validates API credentials or a session cookie and sets the user in context
  */
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
+  if (c.get('user')) return next();
+  const authorization = c.req.header('Authorization');
+  if (authorization) {
+    const service = getEEHooks().getApiTokenService();
+    const match = /^Bearer (\S+)$/i.exec(authorization);
+    if (!service || !match)
+      return c.json(
+        { success: false, error: 'UNAUTHORIZED', message: 'Invalid API credentials' },
+        401
+      );
+    const result = await service.validateToken(match[1]);
+    if (!result.success)
+      return c.json({ success: false, error: result.code, message: result.error }, 401);
+    const token = result.value;
+    const scope = ['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) ? 'read' : 'write';
+    if (!service.hasScope(token, scope) || (scope === 'write' && token.user.role === 'viewer')) {
+      return c.json(
+        { success: false, error: 'FORBIDDEN', message: 'Insufficient API permissions' },
+        403
+      );
+    }
+    if (/^\/api\/(auth|tokens)(\/|$)/.test(c.req.path)) {
+      return c.json(
+        { success: false, error: 'FORBIDDEN', message: 'Use a session to manage credentials' },
+        403
+      );
+    }
+    c.set('user', token.user);
+    c.set('apiToken', token);
+    return next();
+  }
   const sessionId = getCookie(c, 'session');
-
-  if (!sessionId) {
+  if (!sessionId)
     return c.json(
       { success: false, error: 'UNAUTHORIZED', message: 'Authentication required' },
       401
     );
-  }
-
   const result = await authService.validateSession(sessionId);
-
-  if (!result.success) {
+  if (!result.success)
     return c.json(
       { success: false, error: result.code ?? 'UNAUTHORIZED', message: result.error },
       401
     );
-  }
-
-  // Set user and session in context
   c.set('user', result.value.user);
   c.set('session', result.value.session);
 
@@ -62,7 +89,12 @@ export function authorize(allowedRoles: Array<'admin' | 'editor' | 'viewer'>): M
       );
     }
 
-    if (!allowedRoles.includes(user.role)) {
+    const token = c.get('apiToken');
+    const adminRoute = allowedRoles.length === 1 && allowedRoles[0] === 'admin';
+    if (
+      !allowedRoles.includes(user.role) ||
+      (token && adminRoute && !token.scopes.includes('admin'))
+    ) {
       return c.json(
         { success: false, error: 'FORBIDDEN', message: 'Insufficient permissions' },
         403
@@ -97,30 +129,7 @@ export const optionalAuth: MiddlewareHandler = async (c, next) => {
  * Combines authMiddleware + authorize(['admin'])
  */
 export const adminOnly: MiddlewareHandler = async (c, next) => {
-  const sessionId = getCookie(c, 'session');
-
-  if (!sessionId) {
-    return c.json(
-      { success: false, error: 'UNAUTHORIZED', message: 'Authentication required' },
-      401
-    );
-  }
-
-  const result = await authService.validateSession(sessionId);
-
-  if (!result.success) {
-    return c.json(
-      { success: false, error: result.code ?? 'UNAUTHORIZED', message: result.error },
-      401
-    );
-  }
-
-  if (result.value.user.role !== 'admin') {
-    return c.json({ success: false, error: 'FORBIDDEN', message: 'Admin access required' }, 403);
-  }
-
-  c.set('user', result.value.user);
-  c.set('session', result.value.session);
-
-  return next();
+  const response = await authMiddleware(c, async () => {});
+  if (response instanceof Response) return response;
+  return authorize(['admin'])(c, next);
 };

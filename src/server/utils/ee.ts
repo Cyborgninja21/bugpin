@@ -1,5 +1,5 @@
 import type { Context, Next } from 'hono';
-import type { EEPlugin, EEFeature } from '../types/ee-plugin.js';
+import type { EEPlugin, EEFeature, ProjectLicenseService } from '../types/ee-plugin.js';
 import { registerEEHooks, resetEEHooks } from './ee-hooks.js';
 import { logger } from './logger.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
@@ -25,12 +25,16 @@ let eeInitialized = false;
 
 /**
  * Resolve the EE module path.
- * Tries compiled dist/ first (production), falls back to src/ (development).
+ * Prefers source in development and compiled modules in production.
  */
 function resolveEEPath(): string | null {
   if (eeModulePath) return eeModulePath;
 
-  for (const path of ['../../../ee/dist', '../../../ee/src']) {
+  const paths =
+    process.env.NODE_ENV === 'development'
+      ? ['../../../ee/src', '../../../ee/dist']
+      : ['../../../ee/dist', '../../../ee/src'];
+  for (const path of paths) {
     try {
       require.resolve(path);
       eeModulePath = path;
@@ -65,6 +69,21 @@ export function getEELicenseService() {
   } catch {
     return null;
   }
+}
+
+export function getEEProjectLicenseService(): ProjectLicenseService | null {
+  const path = resolveEEPath();
+  if (!path) return null;
+  return require(path).projectLicenseService ?? null;
+}
+
+export async function syncEELicense(): Promise<import('./result.js').Result<boolean>> {
+  const path = resolveEEPath();
+  const { Result } = await import('./result.js');
+  if (!path) return Result.fail('Enterprise Edition is not installed', 'EE_NOT_AVAILABLE');
+  const refresh = require(path).refreshLicense;
+  if (!refresh) return Result.fail('License sync is unavailable', 'SYNC_UNAVAILABLE');
+  return refresh();
 }
 
 /**
@@ -118,12 +137,19 @@ export async function initializeEE(): Promise<void> {
       if (storedKey) {
         const licenseService = getEELicenseService();
         if (licenseService) {
-          const result = await licenseService.validateAndStore(storedKey);
+          const authorization = await settingsRepo.get<string>('ee:license_authorization');
+          const result = await licenseService.validateAndStore(storedKey, true, authorization ?? undefined);
+          if (
+            result.valid &&
+            (await settingsRepo.get<string>('ee:license_revoked_key')) === storedKey
+          )
+            licenseService.markInactive();
           if (result.valid) {
             logger.info('License restored from database');
           } else {
             logger.warn('Stored license key is no longer valid', { error: result.error });
-            await settingsRepo.delete('ee:license_key');
+            if (!licenseService.validate(storedKey, true).valid)
+              await settingsRepo.delete('ee:license_key');
           }
         }
       }
@@ -131,6 +157,9 @@ export async function initializeEE(): Promise<void> {
   } catch (error) {
     logger.warn('Failed to restore license from database', { error });
   }
+
+  const ee = require(resolveEEPath()!);
+  ee.startLicenseRefresh?.();
 
   registerEEHooks(plugin.getHooks());
   logger.info('Enterprise Edition initialized', {
@@ -204,21 +233,17 @@ export function getLicenseStatus() {
     };
   }
 
-  if (!licenseService.isValid()) {
-    return {
-      eeAvailable: true,
-      licensed: false,
-      message: 'License expired',
-    };
-  }
-
+  const valid = licenseService.isValid();
   return {
     eeAvailable: true,
-    licensed: true,
+    installed: true,
+    licensed: valid,
+    ...(!valid ? { message: licenseService.getStatus().error ?? 'License inactive' } : {}),
+    ...getEEProjectLicenseService()?.getStatus(),
     plan: license.plan,
     customerName: license.customerName,
     customerEmail: license.customerEmail,
-    features: license.features,
+    features: licenseService.getStatus().features,
     issuedAt: license.issuedAt,
     expiresAt: license.expiresAt,
   };
@@ -282,6 +307,8 @@ export function requireEEFeature(feature: EEFeature) {
  * Reset EE state - used primarily for testing
  */
 export function resetEEState(): void {
+  const path = resolveEEPath();
+  if (path) require(path).stopLicenseRefresh?.();
   eeAvailable = null;
   eeModulePath = null;
   eePlugin = null;

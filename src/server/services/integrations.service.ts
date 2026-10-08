@@ -6,6 +6,7 @@ import { projectsRepo } from '../database/repositories/projects.repo.js';
 import { reportsRepo } from '../database/repositories/reports.repo.js';
 import { filesRepo } from '../database/repositories/files.repo.js';
 import { githubService } from './integrations/github.service.js';
+import { checkProjectLicense } from '../utils/project-license.js';
 import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import type {
@@ -60,6 +61,9 @@ export const integrationsService = {
     if (!project) {
       return Result.fail('Project not found', 'PROJECT_NOT_FOUND');
     }
+
+    const access = checkProjectLicense(input.projectId);
+    if (!access.success) return access;
 
     // Validate name
     if (!input.name || input.name.trim().length < 2) {
@@ -135,6 +139,9 @@ export const integrationsService = {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
 
+    const access = checkProjectLicense(existing.projectId);
+    if (!access.success) return access;
+
     // Validate name if provided
     if (input.name !== undefined) {
       if (input.name.trim().length < 2) {
@@ -190,6 +197,9 @@ export const integrationsService = {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
 
+    const access = checkProjectLicense(existing.projectId);
+    if (!access.success) return access;
+
     await integrationsRepo.delete(id);
 
     logger.info('Integration deleted', { integrationId: id });
@@ -205,6 +215,9 @@ export const integrationsService = {
     if (!integration) {
       return Result.fail('Integration not found', 'NOT_FOUND');
     }
+
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
 
     try {
       let result: TestConnectionResult;
@@ -266,6 +279,9 @@ export const integrationsService = {
     if (!integration) {
       return Result.fail('Integration not found', 'INTEGRATION_NOT_FOUND');
     }
+
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
 
     if (!integration.isActive) {
       return Result.fail('Integration is disabled', 'INTEGRATION_DISABLED');

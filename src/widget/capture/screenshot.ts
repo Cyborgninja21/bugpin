@@ -1,4 +1,6 @@
 import { toCanvas } from 'html-to-image';
+import { withCaptureClone } from './capture-clone';
+import { recordScrollbars } from './scrollbars';
 
 type ToCanvasOptions = NonNullable<Parameters<typeof toCanvas>[1]>;
 
@@ -159,6 +161,24 @@ function shouldIncludeNode(node: Node): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Render `element` with html-to-image. BugPin's clone is prepared right before
+ * serialization so its scrollbars match the live page.
+ */
+function renderToCanvas(
+  element: HTMLElement,
+  options: ToCanvasOptions
+): Promise<HTMLCanvasElement> {
+  // html-to-image applies explicit width or height to the root clone itself.
+  const rootSizeLocked = options.width !== undefined || options.height !== undefined;
+  const scrollbars = recordScrollbars(element, rootSizeLocked);
+  return withCaptureClone(
+    element,
+    (_svg, cloneRoot) => scrollbars.apply(cloneRoot),
+    (style) => toCanvas(element, { ...options, style, filter: scrollbars.observe(options.filter) })
+  );
 }
 
 /**
@@ -513,7 +533,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const fullCanvas = await toCanvas(element, toCanvasOptions);
+      const fullCanvas = await renderToCanvas(element, toCanvasOptions);
 
       // Debug: log actual canvas dimensions
       console.log('[BugPin] Canvas captured:', {
@@ -581,7 +601,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
         filter: shouldIncludeNode,
       };
 
-      const canvas = await toCanvas(element, toCanvasOptions);
+      const canvas = await renderToCanvas(element, toCanvasOptions);
       return canvas.toDataURL('image/png');
     }
 
@@ -598,7 +618,7 @@ export async function captureScreenshot(options: CaptureOptions = {}): Promise<s
       filter: shouldIncludeNode,
     };
 
-    const canvas = await toCanvas(element, toCanvasOptions);
+    const canvas = await renderToCanvas(element, toCanvasOptions);
     return canvas.toDataURL('image/png');
   } finally {
     // Restore visibility of all BugPin elements

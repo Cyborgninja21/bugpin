@@ -1,11 +1,14 @@
+import type { Readable } from 'node:stream';
 import type { Hono } from 'hono';
 import type { Report, EmailTemplateType, User, CustomEmailTemplates } from '@shared/types';
 import type { Result } from '../utils/result.js';
+import type { EnterpriseLicenseAcceptance } from '@shared/enterprise-license';
 
 /**
  * Storage provider interface for S3 or other storage backends
  */
 export interface StorageProvider {
+  read(path: string): Promise<Result<Uint8Array>>;
   upload(options: StorageUploadOptions): Promise<Result<StorageUploadResult>>;
   delete(key: string): Promise<Result<void>>;
   exists(key: string): Promise<Result<boolean>>;
@@ -15,7 +18,9 @@ export interface StorageProvider {
 
 export interface StorageUploadOptions {
   key: string;
-  body: Buffer | Uint8Array | ReadableStream;
+  body: Buffer | Uint8Array | ReadableStream | Readable;
+  contentLength?: number;
+  checksumSHA256?: string;
   contentType: string;
   metadata?: Record<string, string>;
 }
@@ -74,7 +79,10 @@ export interface AdminBrandingService {
   uploadIcon(mode: 'light' | 'dark', file: BrandingFileData): Promise<Result<string>>;
   updatePrimaryColor(color: string): Promise<Result<void>>;
   updateAdminThemeColors(colors: Record<string, string>): Promise<Result<void>>;
-  resetToDefaults(type?: 'logo' | 'icon' | 'favicon' | 'color'): Promise<Result<void>>;
+  resetToDefaults(
+    type?: 'logo' | 'icon' | 'favicon' | 'color',
+    mode?: 'light' | 'dark'
+  ): Promise<Result<void>>;
 }
 
 export interface BrandingFileData {
@@ -118,6 +126,26 @@ export interface WhiteLabelService {
  * When EE is available and licensed, these hooks invoke EE functionality.
  * When EE is not available, these are no-ops or return defaults.
  */
+export interface ProjectLicenseStatus {
+  projectLimit: number | null;
+  usedProjects: number;
+  licensedProjectIds: string[];
+  selectionRequired: boolean;
+}
+
+export interface ProjectLicenseService {
+  agreementVersion?: string;
+  getStatus(): ProjectLicenseStatus;
+  checkAccess(projectId: string): Result<void>;
+  reserveProject(projectId: string): Result<void>;
+  activate(
+    key: string,
+    projectIds: unknown,
+    acceptance: EnterpriseLicenseAcceptance
+  ): Promise<Result<unknown>>;
+  selectProjects(projectIds: unknown): Result<ProjectLicenseStatus>;
+}
+
 export interface EEHooks {
   // Webhook hooks
   onReportCreated(report: Report): Promise<void>;

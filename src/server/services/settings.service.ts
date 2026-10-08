@@ -1,3 +1,4 @@
+import { hasEEFeature } from '../utils/ee.js';
 import { settingsRepo } from '../database/repositories/settings.repo.js';
 import { settingsCacheService } from './settings-cache.service.js';
 import { Result } from '../utils/result.js';
@@ -15,16 +16,19 @@ import type {
   NotificationDefaultSettings,
   BrandingSettings,
   AdminButtonColors,
+  ReporterNotificationSettings,
+  ProjectLanguageSettings,
   ThemeColors,
   PrivacySettings,
-  ProjectLanguageSettings,
-  ReporterNotificationSettings,
 } from '@shared/types';
 
 // Types
 
 export interface UpdateSettingsInput {
   // System settings
+  invitationExpirationDays?: number;
+  reporterNotifications?: Partial<ReporterNotificationSettings>;
+  language?: ProjectLanguageSettings;
   appName?: string;
   appUrl?: string;
   retentionDays?: number;
@@ -59,14 +63,10 @@ export interface UpdateSettingsInput {
   screenshot?: Partial<GlobalScreenshotSettings>;
   // Notification defaults
   notifications?: Partial<NotificationDefaultSettings>;
-  // Reporter notification defaults
-  reporterNotifications?: Partial<ReporterNotificationSettings>;
   // Branding settings
   branding?: Partial<BrandingSettings>;
   // Admin Console settings
   adminButton?: Partial<AdminButtonColors>;
-  // Widget language defaults
-  language?: ProjectLanguageSettings;
 }
 
 // Service
@@ -185,9 +185,28 @@ export const settingsService = {
       }
     }
 
+    if (
+      (input.branding !== undefined || input.adminButton !== undefined) &&
+      !hasEEFeature('custom-branding')
+    )
+      return Result.fail('Custom branding requires Enterprise license', 'FEATURE_NOT_LICENSED');
+    if (
+      (input.s3Config !== undefined || input.s3Enabled !== undefined) &&
+      !hasEEFeature('s3-storage')
+    )
+      return Result.fail('S3 storage requires Enterprise license', 'FEATURE_NOT_LICENSED');
+
     // Build updates object with nested structure
     const updates: Partial<AppSettings> = {};
 
+    if (input.invitationExpirationDays !== undefined)
+      updates.invitationExpirationDays = input.invitationExpirationDays;
+    if (input.language !== undefined) updates.language = input.language;
+    if (input.reporterNotifications !== undefined)
+      updates.reporterNotifications = {
+        ...(await settingsRepo.getAll()).reporterNotifications,
+        ...input.reporterNotifications,
+      };
     // System settings
     if (input.appName !== undefined) {
       updates.appName = input.appName.trim();
@@ -233,7 +252,7 @@ export const settingsService = {
       updates.s3Enabled = input.s3Enabled;
     }
     if (input.s3Config !== undefined) {
-      updates.s3Config = input.s3Config;
+      updates.s3Config = { ...(await settingsRepo.getAll()).s3Config, ...input.s3Config };
     }
 
     // Nested widget settings
@@ -252,23 +271,15 @@ export const settingsService = {
     if (input.notifications !== undefined) {
       updates.notifications = input.notifications as NotificationDefaultSettings;
     }
-    if (input.reporterNotifications !== undefined) {
-      updates.reporterNotifications = input.reporterNotifications as ReporterNotificationSettings;
-    }
 
     // Branding settings
     if (input.branding !== undefined) {
-      updates.branding = input.branding as BrandingSettings;
+      updates.branding = { ...(await settingsRepo.getAll()).branding, ...input.branding };
     }
 
     // Admin Console settings
     if (input.adminButton !== undefined) {
-      updates.adminButton = input.adminButton as AdminButtonColors;
-    }
-
-    // Widget language settings
-    if (input.language !== undefined) {
-      updates.language = input.language;
+      updates.adminButton = { ...(await settingsRepo.getAll()).adminButton, ...input.adminButton };
     }
 
     const settings = await settingsRepo.updateAll(updates);

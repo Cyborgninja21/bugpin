@@ -83,7 +83,7 @@ const DEFAULT_NOTIFICATIONS: NotificationDefaultSettings = {
   notifyOnDeletion: true,
 };
 
-const DEFAULT_BRANDING: BrandingSettings = {
+export const DEFAULT_BRANDING: BrandingSettings = {
   primaryColor: '#02658D',
   logoLightUrl: null,
   logoDarkUrl: null,
@@ -111,7 +111,7 @@ const DEFAULT_PRIVACY: PrivacySettings = {
   euPrivacyMode: false,
 };
 
-const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
+export const DEFAULT_ADMIN_BUTTON: AdminButtonColors = {
   lightButtonColor: '#02658D',
   lightTextColor: '#ffffff',
   lightButtonHoverColor: '#024F6F',
@@ -181,6 +181,29 @@ export const settingsRepo = {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
       [key, jsonValue, now]
     );
+  },
+
+  compareAndSet<T>(key: string, expected: T, value: T): boolean {
+    const result = getDb().run(
+      'UPDATE settings SET value = ?, updated_at = ? WHERE key = ? AND value = ?',
+      [JSON.stringify(value), new Date().toISOString(), key, JSON.stringify(expected)]
+    );
+    return result.changes === 1;
+  },
+
+  mutate<T>(key: string, update: (current: T | null) => T): void {
+    const db = getDb();
+    db.transaction(() => {
+      const row = db.query('SELECT value FROM settings WHERE key = ?').get(key) as {
+        value: string;
+      } | null;
+      const value = update(row ? (JSON.parse(row.value) as T) : null);
+      db.run(
+        `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+        [key, JSON.stringify(value), new Date().toISOString()]
+      );
+    })();
   },
 
   /**

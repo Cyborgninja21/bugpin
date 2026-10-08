@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { brandingApi } from '../../api/branding';
 import { renderWithQuery, screen, userEvent, waitFor } from '../utils';
 import { BrandingProvider, useBranding } from '../../contexts/BrandingContext';
 import { mockBrandingConfig } from '../mocks/handlers';
@@ -73,4 +74,46 @@ describe('BrandingProvider', () => {
 
     await user.click(screen.getByRole('button', { name: 'Refetch' }));
   });
+});
+
+it('updates colors and favicon links when customization is suspended and restored', async () => {
+  document.documentElement.classList.remove('dark');
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.href = '/branding/light/favicon-light.ico';
+  document.head.append(link);
+  let active = true;
+  const defaults = {
+    ...mockBrandingConfig,
+    primaryColor: '#02658D',
+    faviconLightVersion: 'default',
+    adminThemeColors: { ...mockBrandingConfig.adminThemeColors, lightButtonColor: '#02658D' },
+  };
+  const getter = vi
+    .spyOn(brandingApi, 'getConfig')
+    .mockImplementation(async () => (active ? mockBrandingConfig : defaults));
+  try {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <BrandingProvider>
+        <BrandingConsumer />
+      </BrandingProvider>
+    );
+    await screen.findByText(mockBrandingConfig.primaryColor);
+    for (const enabled of [false, true]) {
+      active = enabled;
+      await user.click(screen.getByRole('button', { name: 'Refetch' }));
+      await waitFor(() => {
+        expect(document.documentElement.style.getPropertyValue('--primary')).toBe(
+          hexToHsl(enabled ? mockBrandingConfig.adminThemeColors.lightButtonColor : '#02658D')
+        );
+        expect(new URL(link.href).searchParams.get('v')).toBe(
+          enabled ? mockBrandingConfig.faviconLightVersion : 'default'
+        );
+      });
+    }
+  } finally {
+    getter.mockRestore();
+    link.remove();
+  }
 });

@@ -16,6 +16,7 @@ export interface FormData {
 }
 
 interface WidgetDialogProps {
+  hidePoweredBy?: boolean;
   onClose: () => void;
   onSubmit: (data: FormData, media: CapturedMedia[]) => void;
   onCaptureScreenshot: () => void;
@@ -48,6 +49,7 @@ const TAB_ICONS = {
 };
 
 export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
+  hidePoweredBy = false,
   onClose,
   onSubmit,
   onCaptureScreenshot,
@@ -291,17 +293,19 @@ export const WidgetDialog: FunctionComponent<WidgetDialogProps> = ({
         )}
 
         {/* Branding */}
-        <div class="shrink-0 py-3 px-6 text-center text-xs text-muted-foreground border-t border-solid border-border bg-background">
-          {t('dialog.branding.poweredBy')}{' '}
-          <a
-            href="https://bugpin.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-primary no-underline font-medium hover:underline hover:text-primary-hover"
-          >
-            BugPin
-          </a>
-        </div>
+        {!hidePoweredBy && (
+          <div class="shrink-0 py-3 px-6 text-center text-xs text-muted-foreground border-t border-solid border-border bg-background">
+            {t('dialog.branding.poweredBy')}{' '}
+            <a
+              href="https://bugpin.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-primary no-underline font-medium hover:underline hover:text-primary-hover"
+            >
+              BugPin
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

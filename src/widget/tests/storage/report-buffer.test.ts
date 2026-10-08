@@ -191,6 +191,8 @@ describe('report buffer', () => {
 
   it('starts and stops auto sync', async () => {
     const { startAutoSync, stopAutoSync } = await import('../../storage/report-buffer');
+    // Importing api/submit starts auto sync, so another test file may have left an interval running.
+    stopAutoSync();
 
     let intervalStarted = false;
     let intervalCleared = false;
@@ -211,8 +213,9 @@ describe('report buffer', () => {
   });
 
   it('syncs pending reports when online event fires', async () => {
-    const { bufferReport, getPendingCount, startAutoSync, stopAutoSync } =
+    const { bufferReport, clearBuffer, getPendingCount, startAutoSync, stopAutoSync } =
       await import('../../storage/report-buffer');
+    await clearBuffer();
     await bufferReport({
       apiKey: 'proj_key',
       serverUrl: 'https://example.com',

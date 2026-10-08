@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronRight, Crown } from 'lucide-react';
+import { licenseApi } from '../api/license';
+import { useAuth } from '../contexts/AuthContext';
+import { badgeVariants } from './ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './ui/sidebar';
 import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
@@ -62,6 +67,23 @@ function findRouteConfig(pathname: string): { path: string; config: RouteCrumbCo
 }
 
 export function Layout() {
+  const { user } = useAuth();
+  const { data: license, isError: licenseError } = useQuery({
+    queryKey: ['license-status'],
+    queryFn: licenseApi.getStatus,
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+  const enterpriseBadgeClass = badgeVariants({
+    variant: 'outline',
+    className: 'border-0 gap-1.5 px-2 py-1.5 text-muted-foreground sm:px-3',
+  });
+  const enterpriseLabel = (
+    <>
+      <Crown className="size-3.5" aria-hidden="true" />
+      <span className="hidden sm:inline">Enterprise</span>
+    </>
+  );
   const location = useLocation();
   const navigate = useNavigate();
   const routeMatch = findRouteConfig(location.pathname);
@@ -127,6 +149,32 @@ export function Layout() {
             renderBreadcrumb()
           ) : (
             <h1 className="text-sm font-medium">{getPageTitle()}</h1>
+          )}
+          {user && license?.licensed && !licenseError && (
+            <div className="ml-auto shrink-0">
+              <Tooltip delayDuration={500}>
+                <TooltipTrigger asChild>
+                  {user.role === 'admin' ? (
+                    <Link
+                      to="/license"
+                      className={enterpriseBadgeClass}
+                      aria-label="Enterprise license active"
+                    >
+                      {enterpriseLabel}
+                    </Link>
+                  ) : (
+                    <span
+                      className={enterpriseBadgeClass}
+                      aria-label="Enterprise license active"
+                      tabIndex={0}
+                    >
+                      {enterpriseLabel}
+                    </span>
+                  )}
+                </TooltipTrigger>
+                <TooltipContent>Enterprise license active</TooltipContent>
+              </Tooltip>
+            </div>
           )}
         </header>
         <ScrollArea className="flex-1" aria-label="Page content">

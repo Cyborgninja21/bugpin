@@ -1,3 +1,4 @@
+import { ApiTokens } from '../../pages/console/ApiTokens';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -47,6 +48,7 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
           <ProfileSection user={user} />
           <UpdateProfileSection key={user?.id || 'no-user'} user={user} />
           <ChangePasswordSection />
+          <ApiTokens />
         </DialogBody>
       </DialogContent>
     </Dialog>

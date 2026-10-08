@@ -8,7 +8,10 @@ const toCanvasSpy = mock(async (_element: unknown, options?: Record<string, unkn
   };
 });
 
+// Bun keeps module mocks for later test files, so keep the real exports available.
+const actualHtmlToImage = await import('html-to-image');
 mock.module('html-to-image', () => ({
+  ...actualHtmlToImage,
   toCanvas: toCanvasSpy,
 }));
 
@@ -138,6 +141,13 @@ describe('captureScreenshot', () => {
   for (const state of ['pending', 'decoding', 'load-decoding', 'loaded', 'error'] as const) {
     it(`continues capture and cleans up image listeners when an image is ${state}`, async () => {
       const { html, widget } = setupDom();
+      // Track only the image wait timer; timers left by other test files may still fire.
+      const imageWaitTimers: unknown[] = [];
+      globalThis.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+        const id = originalSetTimeout(handler, timeout, ...args);
+        if (timeout === 3000) imageWaitTimers.push(id);
+        return id;
+      }) as unknown as typeof setTimeout;
       const clearTimeoutSpy = mock(originalClearTimeout);
       globalThis.clearTimeout = clearTimeoutSpy as typeof clearTimeout;
       const events = new EventTarget();
@@ -165,7 +175,10 @@ describe('captureScreenshot', () => {
       expect(await captureScreenshot({ method: 'visible' })).toBe('data:image/png;base64,stub');
       expect(widget.style.visibility).toBe('visible');
       expect(image.loading).toBe('lazy');
-      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+      expect(imageWaitTimers).toHaveLength(1);
+      expect(clearTimeoutSpy.mock.calls.filter(([id]) => id === imageWaitTimers[0])).toHaveLength(
+        1
+      );
       expect(image.removeEventListener).toHaveBeenCalledWith('load', expect.any(Function));
       expect(image.removeEventListener).toHaveBeenCalledWith('error', expect.any(Function));
       const decodeCalls = image.decode.mock.calls.length;

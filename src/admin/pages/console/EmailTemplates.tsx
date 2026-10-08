@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
@@ -245,6 +245,9 @@ export function EmailTemplates() {
   const [selectedType, setSelectedType] = useState<EmailTemplateType>('newReport');
   const [activeLocale, setActiveLocale] = useState<LocaleCode>('en');
   const [draft, setDraft] = useState<LocaleDraft>(() => emptyDraft());
+  const baseline = useRef<LocaleDraft>(emptyDraft());
+  const initializedType = useRef<EmailTemplateType | null>(null);
+  const [resetLocales, setResetLocales] = useState<Set<LocaleCode>>(new Set());
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState<{ subject: string; html: string } | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
@@ -273,67 +276,60 @@ export function EmailTemplates() {
     },
   });
 
-  const fetchDefaultTemplate = async (type: EmailTemplateType): Promise<EmailTemplate> => {
-    const response = await api.get(`/templates/${type}/default`);
-    return response.data.template;
-  };
+  const { data: defaults } = useQuery({
+    queryKey: ['email-template-defaults', selectedType],
+    queryFn: async () =>
+      (await api.get(`/templates/${selectedType}/defaults`)).data.templates as Partial<
+        Record<LocaleCode, EmailTemplate>
+      >,
+    enabled: isLicensed,
+  });
 
   useEffect(() => {
-    if (!isLicensed) return;
+    if (!isLicensed || !defaults) return;
+    const typeChanged = initializedType.current !== selectedType;
+    if (!typeChanged && hasChanges) return;
     const next = emptyDraft();
-    const overrides = customTemplates?.[selectedType] ?? {};
-    let hasOverride = false;
     for (const code of SUPPORTED_LOCALES) {
-      const entry = overrides[code];
-      if (entry) {
-        next[code] = { subject: entry.subject, html: entry.html };
-        hasOverride = true;
-      }
+      const entry = customTemplates?.[selectedType]?.[code] ?? defaults[code] ?? defaults.en;
+      if (entry) next[code] = { ...entry };
     }
+    baseline.current = next;
+    initializedType.current = selectedType;
     setDraft(next);
     setHasChanges(false);
+    setResetLocales(new Set());
     setShowPreview(false);
     setPreviewData(null);
-    setActiveLocale('en');
-
-    if (!hasOverride) {
-      fetchDefaultTemplate(selectedType)
-        .then((tpl) => {
-          setDraft((current) => ({
-            ...current,
-            en: { subject: tpl.subject, html: tpl.html },
-          }));
-        })
-        .catch(() => undefined);
-    }
-  }, [customTemplates, selectedType, isLicensed]);
+    if (typeChanged) setActiveLocale('en');
+  }, [customTemplates, selectedType, isLicensed, defaults, hasChanges]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const stored = customTemplates?.[selectedType] ?? {};
+      const updates: Partial<Record<LocaleCode, EmailTemplate | null>> = {};
       for (const code of SUPPORTED_LOCALES) {
         const entry = draft[code];
-        const subject = entry.subject.trim();
-        const html = entry.html.trim();
-        const wasStored = Boolean(stored[code]);
-        const nextHasContent = subject.length > 0 && html.length > 0;
-        if (nextHasContent) {
-          await api.put(`/templates/${selectedType}/${code}`, {
-            subject: entry.subject,
-            html: entry.html,
-          });
-        } else if (wasStored) {
-          await api.delete(`/templates/${selectedType}/${code}`);
+        if (resetLocales.has(code)) {
+          updates[code] = null;
+          continue;
         }
+        const initial = baseline.current[code];
+        if (entry.subject === initial.subject && entry.html === initial.html) continue;
+        if (!entry.subject.trim() || !entry.html.trim())
+          throw new Error(`Subject and content are required for ${code}`);
+        updates[code] = entry;
       }
+      await api.put(`/templates/${selectedType}/locales`, { templates: updates });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['custom-email-templates'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['custom-email-templates'] });
+      baseline.current = draft;
+      setResetLocales(new Set());
       toast.success('Template saved successfully');
       setHasChanges(false);
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Failed to save template');
+      toast.error(err.response?.data?.message || err.message || 'Failed to save template');
     },
   });
 
@@ -378,23 +374,22 @@ export function EmailTemplates() {
     },
   });
 
-  const handleResetLocale = async () => {
-    try {
-      const defaultTemplate = await fetchDefaultTemplate(selectedType);
-      setDraft((current) => ({
-        ...current,
-        [activeLocale]: { subject: defaultTemplate.subject, html: defaultTemplate.html },
-      }));
-      setHasChanges(true);
-      setShowPreview(false);
-      setPreviewData(null);
-      toast.success('Template reset to default');
-    } catch {
-      toast.error('Failed to fetch default template');
-    }
+  const handleResetLocale = () => {
+    const template = defaults?.[activeLocale] ?? defaults?.en;
+    if (!template) return;
+    setDraft((current) => ({ ...current, [activeLocale]: { ...template } }));
+    setResetLocales((current) => new Set([...current, activeLocale]));
+    setHasChanges(true);
+    setShowPreview(false);
+    setPreviewData(null);
   };
 
   const handleSubjectChange = (value: string) => {
+    setResetLocales((current) => {
+      const next = new Set(current);
+      next.delete(activeLocale);
+      return next;
+    });
     setDraft((current) => ({
       ...current,
       [activeLocale]: { ...current[activeLocale], subject: value },
@@ -403,6 +398,11 @@ export function EmailTemplates() {
   };
 
   const handleHtmlChange = (value: string) => {
+    setResetLocales((current) => {
+      const next = new Set(current);
+      next.delete(activeLocale);
+      return next;
+    });
     setDraft((current) => ({
       ...current,
       [activeLocale]: { ...current[activeLocale], html: value },

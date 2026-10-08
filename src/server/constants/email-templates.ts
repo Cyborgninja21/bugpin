@@ -1,3 +1,5 @@
+import type { WhiteLabelConfig } from '../types/ee-plugin.js';
+import { templateService } from '../services/template.service.js';
 import type { EmailTemplateType } from '@shared/types';
 import { defaultEmailTemplates as defaultsByLocale } from '../i18n/email-defaults/index.js';
 
@@ -41,9 +43,29 @@ function getInvitationFooterHtml(): string {
 `;
 }
 
-export function appendFooterToHtml(html: string, templateType: EmailTemplateType): string {
-  const footer = templateType === 'invitation' ? getInvitationFooterHtml() : getEmailFooterHtml();
-  return html.replace(/(\s*<\/div>\s*<\/body>\s*<\/html>\s*)$/i, `${footer}$1`);
+export function appendFooterToHtml(
+  html: string,
+  templateType: EmailTemplateType,
+  whiteLabel?: WhiteLabelConfig
+): string {
+  let footer = templateType === 'invitation' ? getInvitationFooterHtml() : getEmailFooterHtml();
+  if (whiteLabel?.enabled) {
+    const copyright = whiteLabel.customCopyright
+      ? templateService.compileTemplate('{{copyright}}', { copyright: whiteLabel.customCopyright })
+      : '';
+    if (whiteLabel.hideEmailBranding)
+      footer =
+        templateType === 'invitation'
+          ? `<div class="footer"><a href="{{invite.url}}">{{invite.url}}</a>${copyright ? `<p style="margin: 15px 0 0 0;">${copyright}</p>` : ''}</div>`
+          : copyright
+            ? `<div class="footer">${copyright}</div>`
+            : '';
+    else if (copyright) footer = footer.replace(/&copy;.*?<\/p>/, () => `${copyright}</p>`);
+  }
+  return html.replace(
+    /(\s*<\/div>\s*<\/body>\s*<\/html>\s*)$/i,
+    (closingTags) => `${footer}${closingTags}`
+  );
 }
 
 export function getSampleDataForTemplate(

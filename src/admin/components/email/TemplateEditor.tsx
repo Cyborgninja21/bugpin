@@ -147,16 +147,8 @@ export function TemplateEditor({
 }: TemplateEditorProps) {
   const [mode, setMode] = useState<EditorMode>('source'); // Default to source mode for full HTML templates
   const [sourceValue, setSourceValue] = useState(value);
-  // Store the template wrapper so we can re-wrap content when editing in WYSIWYG mode
-  const templateWrapperRef = useRef<string>('');
-
-  // Extract content for WYSIWYG editing and initialize wrapper
   const { content: initialContent, wrapper: initialWrapper } = extractEditableContent(value);
-
-  // Initialize wrapper ref on first render
-  if (templateWrapperRef.current === '' && initialWrapper) {
-    templateWrapperRef.current = initialWrapper;
-  }
+  const templateWrapperRef = useRef(initialWrapper);
 
   const editor = useEditor({
     extensions: [
@@ -183,9 +175,7 @@ export function TemplateEditor({
     onUpdate: ({ editor }) => {
       const editedContent = editor.getHTML();
       // Re-wrap content in template structure if we have a wrapper
-      const fullHtml = templateWrapperRef.current
-        ? wrapContentInTemplate(editedContent, templateWrapperRef.current)
-        : editedContent;
+      const fullHtml = wrapContentInTemplate(editedContent, templateWrapperRef.current);
       onChange(fullHtml);
       setSourceValue(fullHtml);
     },
@@ -201,12 +191,10 @@ export function TemplateEditor({
   useEffect(() => {
     if (editor) {
       const { content: newContent, wrapper: newWrapper } = extractEditableContent(value);
-      if (newWrapper) {
-        templateWrapperRef.current = newWrapper;
-      }
+      templateWrapperRef.current = newWrapper;
       // Only update if content actually changed
       if (newContent !== editor.getHTML()) {
-        editor.commands.setContent(newContent);
+        editor.commands.setContent(newContent, { emitUpdate: false });
       }
       setSourceValue(value);
     }
@@ -216,22 +204,17 @@ export function TemplateEditor({
     if (mode === 'wysiwyg') {
       // Switching to source mode - get full HTML (content re-wrapped in template)
       const editedContent = editor?.getHTML() || '';
-      const fullHtml = templateWrapperRef.current
-        ? wrapContentInTemplate(editedContent, templateWrapperRef.current)
-        : editedContent;
+      const fullHtml = wrapContentInTemplate(editedContent, templateWrapperRef.current);
       setSourceValue(fullHtml);
       setMode('source');
     } else {
       // Switching to WYSIWYG mode - extract content from full HTML
       const { content, wrapper } = extractEditableContent(sourceValue);
-      if (wrapper) {
-        templateWrapperRef.current = wrapper;
-      }
-      editor?.commands.setContent(content);
-      onChange(sourceValue);
+      templateWrapperRef.current = wrapper;
+      editor?.commands.setContent(content, { emitUpdate: false });
       setMode('wysiwyg');
     }
-  }, [mode, editor, sourceValue, onChange]);
+  }, [mode, editor, sourceValue]);
 
   const handleSourceChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {

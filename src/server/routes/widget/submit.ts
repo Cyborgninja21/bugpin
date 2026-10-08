@@ -1,3 +1,5 @@
+import { withEffectiveBranding } from '../../utils/effective-branding.js';
+import { getEEHooks } from '../../utils/ee-hooks.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { reportsService } from '../../services/reports.service.js';
@@ -379,7 +381,7 @@ widget.get('/config/:apiKey', async (c) => {
       500
     );
   }
-  const appSettings = settingsResult.value;
+  const appSettings = withEffectiveBranding(settingsResult.value);
 
   // Get branding primary color
   const brandingPrimaryColor = appSettings.branding.primaryColor;
@@ -473,10 +475,12 @@ widget.get('/config/:apiKey', async (c) => {
   const dialogDarkForegroundColor =
     projDialog?.darkForegroundColor ?? globalDialog.darkForegroundColor;
 
+  const whiteLabel = await getEEHooks().getWhiteLabelService()?.getConfig();
   // Return widget configuration
   return c.json({
     success: true,
     config: {
+      hidePoweredBy: Boolean(whiteLabel?.enabled && whiteLabel.hidePoweredBy),
       projectName: project.name,
       branding: project.settings?.branding || {},
       brandingPrimaryColor,

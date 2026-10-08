@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { __resetI18nForTests, getLocale, setLocale, subscribe, t } from '../../i18n/index';
 
 describe('widget i18n runtime', () => {
   beforeEach(() => {
+    __resetI18nForTests();
+  });
+
+  afterEach(() => {
     __resetI18nForTests();
   });
 

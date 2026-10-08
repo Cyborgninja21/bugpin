@@ -3,6 +3,7 @@ import axios from 'axios';
 export interface LicenseStatus {
   eeAvailable: boolean;
   licensed: boolean;
+  installed?: boolean;
   message?: string;
   plan?: string;
   customerName?: string;
@@ -10,6 +11,10 @@ export interface LicenseStatus {
   features?: string[];
   issuedAt?: string;
   expiresAt?: string;
+  projectLimit?: number | null;
+  usedProjects?: number;
+  licensedProjectIds?: string[];
+  selectionRequired?: boolean;
 }
 
 export interface FeatureStatus {
@@ -45,13 +50,26 @@ export const licenseApi = {
   /**
    * Activate a license key
    */
-  async activate(licenseKey: string): Promise<void> {
-    await axios.post('/api/license/activate', { licenseKey });
+  async activate(
+    licenseKey: string,
+    projectIds: string[] | undefined,
+    agreement: { accepted: true; version: string }
+  ): Promise<void> {
+    await axios.post('/api/license/activate', { licenseKey, projectIds, agreement });
   },
 
   /**
    * Remove the current license
    */
+  async sync(): Promise<LicenseStatus> {
+    const response = await axios.post<LicenseStatus>('/api/license/sync');
+    return response.data;
+  },
+
+  async selectProjects(projectIds: string[]): Promise<void> {
+    await axios.put('/api/license/projects', { projectIds });
+  },
+
   async remove(): Promise<void> {
     await axios.delete('/api/license');
   },

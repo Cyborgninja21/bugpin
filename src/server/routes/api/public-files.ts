@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { readFile } from '../../storage/files.js';
+import { readStoredFile } from '../../storage/files.js';
 import { filesRepo } from '../../database/repositories/files.repo.js';
 import { logger } from '../../utils/logger.js';
 
@@ -28,7 +28,7 @@ publicFilesRoutes.get('/:reportId/:filename', async (c) => {
     }
 
     // Read file from storage
-    const fileBuffer = readFile(fileRecord.path);
+    const fileBuffer = await readStoredFile(fileRecord.path);
 
     if (!fileBuffer) {
       logger.error('Failed to read file from storage', {

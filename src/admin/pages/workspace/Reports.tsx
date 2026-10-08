@@ -74,6 +74,8 @@ import { formatDate as formatAbsoluteDate } from '../../lib/utils';
 import type { ManualReportChannel, Report, User } from '@shared/types';
 
 interface Project {
+  licenseLocked?: boolean;
+  isActive?: boolean;
   id: string;
   name: string;
 }
@@ -185,6 +187,10 @@ export function Reports() {
       return response.data;
     },
   });
+
+  const selectedReadOnly =
+    data?.data?.some((report: Report) => report.licenseLocked && selectedIds.has(report.id)) ??
+    false;
 
   const createReportMutation = useMutation({
     mutationFn: async (form: CreateReportFormState) => {
@@ -314,7 +320,14 @@ export function Reports() {
   };
 
   const openCreateDialog = () => {
-    setCreateForm(buildCreateReportForm(projectId || projectsData?.[0]?.id));
+    const available = projectsData?.filter(
+      (project) => !project.licenseLocked && project.isActive !== false
+    );
+    setCreateForm(
+      buildCreateReportForm(
+        available?.find((project) => project.id === projectId)?.id || available?.[0]?.id
+      )
+    );
     setShowCreateDialog(true);
   };
 
@@ -543,7 +556,11 @@ export function Reports() {
                 {/* Status dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={bulkUpdateMutation.isPending || selectedReadOnly}
+                    >
                       Set Status
                     </Button>
                   </DropdownMenuTrigger>
@@ -566,7 +583,11 @@ export function Reports() {
                 {/* Priority dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={bulkUpdateMutation.isPending || selectedReadOnly}
+                    >
                       Set Priority
                     </Button>
                   </DropdownMenuTrigger>
@@ -592,7 +613,11 @@ export function Reports() {
                 {canManageReports && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={bulkUpdateMutation.isPending || selectedReadOnly}
+                      >
                         Assign
                       </Button>
                     </DropdownMenuTrigger>
@@ -635,7 +660,7 @@ export function Reports() {
                   variant="outline-destructive"
                   size="sm"
                   onClick={() => setShowDeleteConfirm(true)}
-                  disabled={bulkDeleteMutation.isPending}
+                  disabled={bulkDeleteMutation.isPending || selectedReadOnly}
                 >
                   <Trash2 className="h-4 w-4 mr-1" />
                   Delete
@@ -668,8 +693,13 @@ export function Reports() {
                   </SelectTrigger>
                   <SelectContent>
                     {projectsData?.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
+                      <SelectItem
+                        key={project.id}
+                        value={project.id}
+                        disabled={project.licenseLocked || project.isActive === false}
+                      >
                         {project.name}
+                        {project.licenseLocked ? ' (read-only)' : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -824,7 +854,14 @@ export function Reports() {
               </Button>
               <Button
                 type="submit"
-                disabled={createReportMutation.isPending || !createForm.projectId}
+                disabled={
+                  createReportMutation.isPending ||
+                  !createForm.projectId ||
+                  Boolean(
+                    projectsData?.find((project) => project.id === createForm.projectId)
+                      ?.licenseLocked
+                  )
+                }
               >
                 {createReportMutation.isPending ? (
                   <>
@@ -851,11 +888,13 @@ export function Reports() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkDeleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkDeleteMutation.isPending || selectedReadOnly}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="outline-destructive"
               onClick={handleBulkDelete}
-              disabled={bulkDeleteMutation.isPending}
+              disabled={bulkDeleteMutation.isPending || selectedReadOnly}
             >
               {bulkDeleteMutation.isPending ? (
                 <>
@@ -900,6 +939,9 @@ export function Reports() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">{report.title}</p>
+                    {report.licenseLocked && (
+                      <p className="text-xs text-muted-foreground">Read-only · License limit</p>
+                    )}
                     <p className="text-sm text-muted-foreground truncate">
                       {report.metadata?.url || 'No URL'}
                     </p>
@@ -1009,6 +1051,9 @@ export function Reports() {
                   </TableCell>
                   <TableCell>
                     <p className="font-medium">{report.title}</p>
+                    {report.licenseLocked && (
+                      <p className="text-xs text-muted-foreground">Read-only · License limit</p>
+                    )}
                     <p className="text-sm text-muted-foreground truncate max-w-xs">
                       {report.metadata?.url || 'No URL'}
                     </p>

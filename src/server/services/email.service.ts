@@ -1,3 +1,4 @@
+import { withEffectiveBranding } from '../utils/effective-branding.js';
 import nodemailer from 'nodemailer';
 import { settingsCacheService } from './settings-cache.service.js';
 import { logger } from '../utils/logger.js';
@@ -56,11 +57,8 @@ export function resolveTemplate(
   const overriddenForType = overrides?.[type];
   const overriddenForLocale = overriddenForType?.[locale];
   if (overriddenForLocale) return overriddenForLocale;
-  const overriddenEn = overriddenForType?.en;
-  if (overriddenEn) return overriddenEn;
-
   const def = defaultEmailTemplates[type];
-  return def[locale] ?? def.en;
+  return def[locale] ?? overriddenForType?.en ?? def.en;
 }
 
 async function loadOverridesFromEE(): Promise<CustomEmailTemplates | undefined> {
@@ -71,13 +69,39 @@ async function loadOverridesFromEE(): Promise<CustomEmailTemplates | undefined> 
 // Service
 
 export const emailService = {
+  async appendFooter(html: string, type: EmailTemplateType): Promise<string> {
+    const whiteLabel = await getEEHooks().getWhiteLabelService()?.getConfig();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
+    let branded = appendFooterToHtml(html, type, whiteLabel);
+    if (settings.branding?.logoLightUrl && settings.appUrl) {
+      try {
+        const url = new URL(settings.branding.logoLightUrl, settings.appUrl);
+        if (['http:', 'https:'].includes(url.protocol)) {
+          const logo = templateService.compileTemplate(
+            '<img src="{{logo.url}}" alt="{{app.name}}" style="max-width:240px;max-height:80px" />',
+            { logo: { url: url.href }, app: { name: settings.appName } }
+          );
+          branded = branded.replace('<div class="header">', `<div class="header">${logo}`);
+        }
+      } catch {
+        /* An absolute application URL is required for email assets. */
+      }
+    }
+    return branded;
+  },
+
   createTransporter(config: {
     host: string;
     port: number;
     secure: boolean;
     auth?: { user: string; pass: string };
   }) {
-    return nodemailer.createTransport(config);
+    return nodemailer.createTransport({
+      ...config,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    });
   },
 
   /**
@@ -86,7 +110,7 @@ export const emailService = {
   async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; error?: string }> {
     try {
       // Load SMTP settings
-      const settings = await settingsCacheService.getAll();
+      const settings = withEffectiveBranding(await settingsCacheService.getAll());
 
       logger.debug('sendEmail called', {
         recipientCount: options.to.length,
@@ -125,6 +149,7 @@ export const emailService = {
       // Send individual emails per recipient in batches to avoid overwhelming the SMTP server
       const fromAddress = `"${settings.appName || 'BugPin'}" <${settings.smtpConfig.from}>`;
       const batchSize = 10;
+      let failures = 0;
 
       for (let i = 0; i < options.to.length; i += batchSize) {
         const batch = options.to.slice(i, i + batchSize);
@@ -142,12 +167,20 @@ export const emailService = {
 
         for (let j = 0; j < results.length; j++) {
           if (results[j].status === 'rejected') {
+            failures++;
             logger.warn('Failed to send email to recipient', {
               email: batch[j].email,
               error: (results[j] as PromiseRejectedResult).reason,
             });
           }
         }
+      }
+
+      if (failures || !options.to.length) {
+        return {
+          success: false,
+          error: `${failures} of ${options.to.length} recipients failed; ${options.to.length - failures} sent`,
+        };
       }
 
       logger.info('Email sent successfully', {
@@ -187,7 +220,7 @@ export const emailService = {
     data: ReportEmailData
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl } = data;
 
     const template = await this.getTemplate('newReport', teamLocale);
@@ -214,7 +247,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'newReport');
+    const withFooter = await this.appendFooter(compiledHtml, 'newReport');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -235,7 +268,7 @@ export const emailService = {
     data: ReportEmailData & { oldStatus: string; newStatus: string }
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl, oldStatus, newStatus } = data;
 
     const template = await this.getTemplate('statusChange', teamLocale);
@@ -260,7 +293,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'statusChange');
+    const withFooter = await this.appendFooter(compiledHtml, 'statusChange');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -281,7 +314,7 @@ export const emailService = {
     data: ReportEmailData & { oldPriority: string; newPriority: string }
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl, oldPriority, newPriority } = data;
 
     const template = await this.getTemplate('priorityChange', teamLocale);
@@ -306,7 +339,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'priorityChange');
+    const withFooter = await this.appendFooter(compiledHtml, 'priorityChange');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -327,7 +360,7 @@ export const emailService = {
     data: ReportEmailData
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName } = data;
 
     const template = await this.getTemplate('reportDeleted', teamLocale);
@@ -351,7 +384,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reportDeleted');
+    const withFooter = await this.appendFooter(compiledHtml, 'reportDeleted');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -372,7 +405,7 @@ export const emailService = {
     data: ReportEmailData & { assignedToName: string; assignedToEmail?: string }
   ): Promise<{ success: boolean; error?: string }> {
     const teamLocale: LocaleCode = 'en';
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, reportUrl, assignedToName, assignedToEmail } = data;
 
     const template = await this.getTemplate('assignment', teamLocale);
@@ -397,7 +430,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'assignment');
+    const withFooter = await this.appendFooter(compiledHtml, 'assignment');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -422,7 +455,7 @@ export const emailService = {
       appUrl: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -448,7 +481,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reporterConfirmation');
+    const withFooter = await this.appendFooter(compiledHtml, 'reporterConfirmation');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -476,7 +509,7 @@ export const emailService = {
       reporterMessage?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, oldStatus, newStatus, reporterMessage } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -505,7 +538,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reporterStatusChange');
+    const withFooter = await this.appendFooter(compiledHtml, 'reporterStatusChange');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -532,7 +565,7 @@ export const emailService = {
       newPriority: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, oldPriority, newPriority } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -559,7 +592,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reporterPriorityChange');
+    const withFooter = await this.appendFooter(compiledHtml, 'reporterPriorityChange');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -586,7 +619,7 @@ export const emailService = {
       previousAssigneeName?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, assigneeName, previousAssigneeName } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -617,7 +650,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reporterAssignment');
+    const withFooter = await this.appendFooter(compiledHtml, 'reporterAssignment');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -644,7 +677,7 @@ export const emailService = {
       message: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, senderName, message } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -671,7 +704,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reporterMessage');
+    const withFooter = await this.appendFooter(compiledHtml, 'reporterMessage');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -698,7 +731,7 @@ export const emailService = {
       message: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const { report, projectName, appName, appUrl, senderName, message } = data;
     const locale = report.reporterLocale ?? 'en';
 
@@ -724,7 +757,7 @@ export const emailService = {
     };
 
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'reporterMessage');
+    const withFooter = await this.appendFooter(compiledHtml, 'reporterMessage');
     const html = applyBrandColor(
       withFooter,
       settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -746,7 +779,7 @@ export const emailService = {
     recipient: EmailRecipient,
     data: { inviteUrl: string; inviterName: string; expiresInDays: number }
   ): Promise<{ success: boolean; error?: string }> {
-    const settings = await settingsCacheService.getAll();
+    const settings = withEffectiveBranding(await settingsCacheService.getAll());
     const appName = settings.appName || 'BugPin';
 
     const template = await this.getTemplate('invitation', 'en');
@@ -765,7 +798,7 @@ export const emailService = {
 
     const subject = templateService.compileTemplate(template.subject, templateData);
     const compiledHtml = templateService.compileTemplate(template.html, templateData);
-    const withFooter = appendFooterToHtml(compiledHtml, 'invitation');
+    const withFooter = await this.appendFooter(compiledHtml, 'invitation');
     const withFooterCompiled = templateService.compileTemplate(withFooter, templateData);
     const html = applyBrandColor(
       withFooterCompiled,
@@ -808,7 +841,7 @@ export const emailService = {
       await transporter.verify();
 
       // Get template and compile
-      const settings = await settingsCacheService.getAll();
+      const settings = withEffectiveBranding(await settingsCacheService.getAll());
       const resolvedAppName = appName || settings.appName || 'BugPin';
       const template = await this.getTemplate('testEmail', 'en');
       const templateData = {
@@ -819,7 +852,7 @@ export const emailService = {
 
       const subject = templateService.compileTemplate(template.subject, templateData);
       const compiledHtml = templateService.compileTemplate(template.html, templateData);
-      const withFooter = appendFooterToHtml(compiledHtml, 'testEmail');
+      const withFooter = await this.appendFooter(compiledHtml, 'testEmail');
       const html = applyBrandColor(
         withFooter,
         settings.branding?.primaryColor || DEFAULT_BRAND_COLOR

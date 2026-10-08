@@ -39,6 +39,7 @@ async function fetchConfig(
       if (data.success && data.config) {
         const cfg = data.config;
         return {
+          hidePoweredBy: cfg.hidePoweredBy === true,
           buttonText: cfg.buttonText,
           buttonShape: cfg.buttonShape,
           buttonIcon: cfg.buttonIcon,

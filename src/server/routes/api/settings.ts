@@ -1,3 +1,4 @@
+import { withEffectiveBranding } from '../../utils/effective-branding.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { settingsService } from '../../services/settings.service.js';
@@ -7,7 +8,6 @@ import { templateService } from '../../services/template.service.js';
 import {
   defaultEmailTemplates,
   getSampleDataForTemplate,
-  appendFooterToHtml,
   applyBrandColor,
   DEFAULT_BRAND_COLOR,
 } from '../../constants/email-templates.js';
@@ -42,23 +42,13 @@ settings.get('/', authorize(['admin']), async (c) => {
 // Update Settings
 
 settings.put('/', authorize(['admin']), validate({ body: schemas.updateSettings }), async (c) => {
-  const body = await c.req.json();
-
-  // Check if emailTemplates is being updated without EE license
-  if (body.emailTemplates && !hasEEFeature('custom-templates')) {
-    return c.json(
-      {
-        success: false,
-        error: 'FEATURE_NOT_LICENSED',
-        message: "Feature 'custom-templates' requires Enterprise license",
-        upgradeUrl: 'https://bugpin.io/editions/',
-      },
-      402
-    );
-  }
+  const body = schemas.updateSettings.parse(c.get('validatedBody' as never));
 
   // Check if S3 storage is being enabled without EE license
-  if ((body.s3Enabled || body.s3Config) && !hasEEFeature('s3-storage')) {
+  if (
+    (body.s3Enabled !== undefined || body.s3Config !== undefined) &&
+    !hasEEFeature('s3-storage')
+  ) {
     return c.json(
       {
         success: false,
@@ -70,6 +60,19 @@ settings.put('/', authorize(['admin']), validate({ body: schemas.updateSettings 
     );
   }
 
+  if (
+    (body.branding !== undefined || body.adminButton !== undefined) &&
+    !hasEEFeature('custom-branding')
+  ) {
+    return c.json(
+      {
+        success: false,
+        error: 'FEATURE_NOT_LICENSED',
+        message: 'Custom branding requires Enterprise license',
+      },
+      402
+    );
+  }
   const result = await settingsService.update(body);
 
   if (!result.success) {
@@ -187,7 +190,7 @@ settings.post(
         return c.json({ success: false, error: result.code, message: result.error }, 400);
       }
 
-      const settings = result.value;
+      const settings = withEffectiveBranding(result.value);
       const sampleData = getSampleDataForTemplate(
         type as EmailTemplateType,
         settings.appName,
@@ -196,7 +199,7 @@ settings.post(
 
       const compiledSubject = templateService.compileTemplate(subject, sampleData);
       const compiledHtml = templateService.compileTemplate(html, sampleData);
-      const withFooter = appendFooterToHtml(compiledHtml, type as EmailTemplateType);
+      const withFooter = await emailService.appendFooter(compiledHtml, type as EmailTemplateType);
       const finalHtml = applyBrandColor(
         withFooter,
         settings.branding?.primaryColor || DEFAULT_BRAND_COLOR
@@ -263,7 +266,7 @@ settings.post(
         return c.json({ success: false, error: result.code, message: result.error }, 400);
       }
 
-      const appSettings = result.value;
+      const appSettings = withEffectiveBranding(result.value);
 
       // Check if SMTP is configured
       if (!appSettings.smtpEnabled) {
@@ -286,7 +289,7 @@ settings.post(
 
       const compiledSubject = templateService.compileTemplate(subject, sampleData);
       const compiledHtml = templateService.compileTemplate(html, sampleData);
-      const withFooter = appendFooterToHtml(compiledHtml, type as EmailTemplateType);
+      const withFooter = await emailService.appendFooter(compiledHtml, type as EmailTemplateType);
       const finalHtml = applyBrandColor(
         withFooter,
         appSettings.branding?.primaryColor || DEFAULT_BRAND_COLOR

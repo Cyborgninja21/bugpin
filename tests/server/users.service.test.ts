@@ -1,3 +1,6 @@
+import { getEEProjectLicenseService } from '../../src/server/utils/ee';
+const projectLicenseService = getEEProjectLicenseService()!;
+import { Result } from '../../src/server/utils/result';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { usersService } from '../../src/server/services/users.service';
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
@@ -19,6 +22,7 @@ const originalUsersRepo = { ...usersRepo };
 const originalSessionsRepo = { ...sessionsRepo };
 const originalProjectsRepo = { ...projectsRepo };
 const originalHash = Bun.password.hash;
+const originalCheckAccess = projectLicenseService.checkAccess;
 
 let lastCreateInput: unknown;
 let lastUpdateInput: unknown;
@@ -31,6 +35,7 @@ let usersByRole: User[] = [baseUser];
 let projects: Project[] = [];
 
 beforeEach(() => {
+  projectLicenseService.checkAccess = () => Result.ok(undefined);
   lastCreateInput = undefined;
   lastUpdateInput = undefined;
   deletedUserId = null;
@@ -79,6 +84,7 @@ afterEach(() => {
   Object.assign(sessionsRepo, originalSessionsRepo);
   Object.assign(projectsRepo, originalProjectsRepo);
   Bun.password.hash = originalHash;
+  projectLicenseService.checkAccess = originalCheckAccess;
 });
 
 describe('usersService.create', () => {
@@ -394,4 +400,27 @@ describe('usersService lookups', () => {
     const count = await usersService.count();
     expect(count).toBe(3);
   });
+});
+
+it('rejects changing or clearing defaults on a locked project before any user or project writes', async () => {
+  projectLicenseService.checkAccess = () => Result.fail('Locked', 'PROJECT_NOT_LICENSED');
+  let writes = 0;
+  projectsRepo.update = async () => {
+    writes++;
+    return null;
+  };
+  for (const assigned of [false, true]) {
+    projects = [
+      { id: 'locked', settings: assigned ? { defaultAssigneeUserId: 'usr_1' } : {} },
+    ] as Project[];
+    const result = await usersService.update('usr_1', {
+      name: 'New name',
+      defaultProjectIds: assigned ? [] : ['locked'],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('PROJECT_NOT_LICENSED');
+    expect(lastUpdateInput).toBeUndefined();
+    expect(writes).toBe(0);
+  }
+  expect((await usersService.update('usr_1', { name: 'New name' })).success).toBe(true);
 });

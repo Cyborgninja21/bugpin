@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithProviders, screen, userEvent, waitFor } from '../../utils';
+import { act, renderWithProviders, screen, userEvent, waitFor } from '../../utils';
 import { EmailTemplates } from '../../../pages/console/EmailTemplates';
 import { api } from '../../../api/client';
 import { toast } from 'sonner';
@@ -78,7 +78,9 @@ describe('EmailTemplates', () => {
     vi.spyOn(api, 'get').mockImplementation((path: string) => {
       calls.push({ method: 'GET', path });
       if (path === '/templates') {
-        return Promise.resolve({ data: { success: true, templates: overrides } } as never);
+        return Promise.resolve({
+          data: { success: true, templates: structuredClone(overrides) },
+        } as never);
       }
       if (path === '/settings') {
         return Promise.resolve({
@@ -177,6 +179,7 @@ describe('EmailTemplates', () => {
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Template saved successfully');
     });
+    expect(screen.getByRole('tab', { name: /Français/ })).toHaveAttribute('aria-selected', 'true');
 
     const putCalls = calls.filter((c) => c.method === 'PUT');
     const deleteCalls = calls.filter((c) => c.method === 'DELETE');
@@ -194,5 +197,26 @@ describe('EmailTemplates', () => {
       },
     ]);
     expect(deleteCalls).toHaveLength(0);
+  });
+
+  it('keeps the selected locale when unedited templates are refetched', async () => {
+    const overrides = {
+      newReport: { fr: { subject: 'French subject', html: '<p>French body</p>' } },
+    };
+    mockApi({ overrides });
+    const user = userEvent.setup();
+    const { queryClient } = renderWithProviders(<EmailTemplates />);
+    await user.click(await screen.findByRole('tab', { name: /Français/ }));
+    expect(screen.getByLabelText(/Subject Line/i)).toHaveValue('French subject');
+
+    overrides.newReport.fr.subject = 'Updated French subject';
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['custom-email-templates'] });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Subject Line/i)).toHaveValue('Updated French subject');
+    });
+    expect(screen.getByRole('tab', { name: /Français/ })).toHaveAttribute('aria-selected', 'true');
   });
 });

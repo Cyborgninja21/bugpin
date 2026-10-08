@@ -156,6 +156,25 @@ export function ReporterNotifications() {
                 />
               </div>
 
+              {/* Assignment Notifications */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="reporter-assignment-change" className="text-sm font-normal">
+                    Assignment Notifications
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Notify reporters when their bug report is assigned or reassigned
+                  </p>
+                </div>
+                <Switch
+                  id="reporter-assignment-change"
+                  checked={formData.notifyOnAssignment}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, notifyOnAssignment: checked })
+                  }
+                />
+              </div>
+
               {/* Messaging System */}
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">

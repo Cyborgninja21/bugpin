@@ -10,27 +10,69 @@ type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   ScrollAreaProps
->(({ className, contentClassName, children, ...props }, ref) => (
-  <ScrollAreaPrimitive.Root
-    ref={ref}
-    className={cn('relative flex min-h-0 min-w-0 flex-col overflow-hidden', className)}
-    {...props}
-  >
-    <ScrollAreaPrimitive.Viewport
-      disableImplicitContentElement
-      tabIndex={0}
-      aria-label={props['aria-label']}
-      className="min-h-0 w-full flex-1 rounded-[inherit] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+>(({ className, contentClassName, children, ...props }, ref) => {
+  const viewportRef = React.useRef<HTMLDivElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const [focusable, setFocusable] = React.useState(false);
+
+  React.useEffect(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+
+    const updateFocusable = () => {
+      const overflows =
+        viewport.scrollHeight > viewport.clientHeight ||
+        viewport.scrollWidth > viewport.clientWidth;
+      const hasFocusableChildren = Array.from(
+        content.querySelectorAll<HTMLElement>(
+          'a[href], button, input, select, textarea, [tabindex], [contenteditable]'
+        )
+      ).some(
+        (element) =>
+          !element.matches(':disabled') &&
+          (element.tabIndex >= 0 ||
+            (element.isContentEditable && !element.hasAttribute('tabindex'))) &&
+          element.getClientRects().length > 0
+      );
+      setFocusable(overflows && !hasFocusableChildren);
+    };
+
+    updateFocusable();
+    const resizeObserver = new ResizeObserver(updateFocusable);
+    resizeObserver.observe(viewport);
+    resizeObserver.observe(content);
+    const mutationObserver = new MutationObserver(updateFocusable);
+    mutationObserver.observe(content, { childList: true, subtree: true, attributes: true });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, []);
+
+  return (
+    <ScrollAreaPrimitive.Root
+      ref={ref}
+      className={cn('relative flex min-h-0 min-w-0 flex-col overflow-hidden', className)}
+      {...props}
     >
-      <ScrollAreaPrimitive.Content style={{ display: 'block' }}>
-        <div className={contentClassName}>{children}</div>
-      </ScrollAreaPrimitive.Content>
-    </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
-    <ScrollBar orientation="horizontal" />
-    <ScrollAreaPrimitive.Corner />
-  </ScrollAreaPrimitive.Root>
-));
+      <ScrollAreaPrimitive.Viewport
+        disableImplicitContentElement
+        ref={viewportRef}
+        tabIndex={focusable ? 0 : -1}
+        aria-label={props['aria-label'] ?? 'Scrollable content'}
+        className="min-h-0 w-full flex-1 rounded-[inherit] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <ScrollAreaPrimitive.Content ref={contentRef} style={{ display: 'block' }}>
+          <div className={contentClassName}>{children}</div>
+        </ScrollAreaPrimitive.Content>
+      </ScrollAreaPrimitive.Viewport>
+      <ScrollBar />
+      <ScrollBar orientation="horizontal" />
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
+  );
+});
 ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
 
 const ScrollBar = React.forwardRef<
@@ -40,6 +82,7 @@ const ScrollBar = React.forwardRef<
   <ScrollAreaPrimitive.ScrollAreaScrollbar
     ref={ref}
     orientation={orientation}
+    data-slot="scroll-area-scrollbar"
     className={cn(
       'flex touch-none select-none p-px transition-colors',
       orientation === 'vertical' && 'h-full w-2.5 border-l border-l-transparent',

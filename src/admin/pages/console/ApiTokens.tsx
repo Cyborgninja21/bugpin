@@ -283,7 +283,15 @@ export function ApiTokens() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto"
+          onEscapeKeyDown={(event) => {
+            if (createdToken) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (createdToken) event.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{createdToken ? 'API token created' : 'Create API token'}</DialogTitle>
             <DialogDescription>

@@ -1,3 +1,4 @@
+import { checkProjectLicense } from '../utils/project-license.js';
 import { usersRepo, type CreateUserData } from '../database/repositories/users.repo.js';
 import { sessionsRepo } from '../database/repositories/sessions.repo.js';
 import { projectsRepo } from '../database/repositories/projects.repo.js';
@@ -253,6 +254,15 @@ export const usersService = {
       }
     }
 
+    if (selectedProjectIds && projectsForDefaults) {
+      for (const project of projectsForDefaults) {
+        if (selectedProjectIds.has(project.id) === (project.settings?.defaultAssigneeUserId === id))
+          continue;
+        const access = checkProjectLicense(project.id);
+        if (!access.success) return access;
+      }
+    }
+
     const updates: Partial<Pick<User, 'name' | 'role' | 'isActive' | 'avatarUrl'>> = {};
 
     if (input.name !== undefined) {
@@ -282,7 +292,7 @@ export const usersService = {
         const isSelected = selectedProjectIds.has(project.id);
         const isCurrentlyAssigned = project.settings?.defaultAssigneeUserId === id;
 
-        if (!isSelected && !isCurrentlyAssigned) {
+        if (isSelected === isCurrentlyAssigned) {
           continue;
         }
 

@@ -1,3 +1,5 @@
+import { getEEProjectLicenseService } from '../../src/server/utils/ee';
+const projectLicenseService = getEEProjectLicenseService()!;
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { githubSyncService } from '../../src/server/services/integrations/github-sync.service';
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
@@ -49,6 +51,7 @@ const originalFilesRepo = { ...filesRepo };
 const originalGithubService = { ...githubService };
 const originalSettingsService = { ...settingsService };
 const originalLogger = { ...logger };
+const originalAccess = projectLicenseService.checkAccess;
 
 let reportById: Report | null = baseReport;
 let integrationById: Integration | null = baseIntegration;
@@ -60,6 +63,7 @@ let updatedIntegrationConfig: unknown;
 let createWebhookUrl: string | null = null;
 
 beforeEach(() => {
+  projectLicenseService.checkAccess = () => Result.ok(undefined);
   reportById = baseReport;
   integrationById = baseIntegration;
   updateSyncPayload = undefined;
@@ -129,6 +133,7 @@ afterEach(() => {
   Object.assign(githubService, originalGithubService);
   Object.assign(settingsService, originalSettingsService);
   Object.assign(logger, originalLogger);
+  projectLicenseService.checkAccess = originalAccess;
 });
 
 describe('githubSyncService', () => {
@@ -504,4 +509,30 @@ describe('githubSyncService', () => {
     const ids = await githubSyncService.getUnsyncedReportIds('prj_1');
     expect(ids).toEqual(['rpt_2']);
   });
+});
+
+it('does not commit sync results or errors after the project is deselected during a request', async () => {
+  for (const mode of ['create', 'update', 'failure', 'throw']) {
+    reportById = { ...baseReport, ...(mode === 'update' ? { githubIssueNumber: 123 } : {}) };
+    updateSyncPayload = undefined; updateLastUsedId = null;
+    projectLicenseService.checkAccess = () => Result.ok(undefined);
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const remote = async () => {
+      started.resolve(); await finish.promise;
+      if (mode === 'throw') throw new Error('Remote error');
+      return mode === 'failure' ? { success: false, error: 'Remote error' } : { success: true, issueNumber: 123, issueUrl: 'https://example.com/123' };
+    };
+    githubService.createIssue = remote;
+    githubService.updateIssue = remote;
+    const pending = githubSyncService.syncReport('rpt_1', 'int_1');
+    await started.promise;
+    projectLicenseService.checkAccess = () => Result.fail('Locked', 'PROJECT_NOT_LICENSED');
+    finish.resolve();
+    const result = await pending;
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('PROJECT_NOT_LICENSED');
+    expect(updateSyncPayload).toBeUndefined();
+    expect(updateLastUsedId).toBeNull();
+  }
 });

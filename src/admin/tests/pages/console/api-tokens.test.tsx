@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { renderWithQuery, screen, userEvent, waitFor, within } from '../../utils';
+import { fireEvent, renderWithQuery, screen, userEvent, waitFor, within } from '../../utils';
 import { ApiTokens } from '../../../pages/console/ApiTokens';
 import { api } from '../../../api/client';
 import { licenseApi } from '../../../api/license';
@@ -82,6 +82,10 @@ it('creates, copies, lists a token, and resets the form for the next token', asy
   await user.click(within(dialog).getByRole('button', { name: 'Create token' }));
 
   expect(await screen.findByLabelText('New API token')).toHaveValue('bpat_example_secret');
+  await user.keyboard('{Escape}');
+  expect(screen.getByLabelText('New API token')).toHaveValue('bpat_example_secret');
+  fireEvent.pointerDown(document.body, { button: 0, pointerType: 'mouse' });
+  expect(screen.getByLabelText('New API token')).toHaveValue('bpat_example_secret');
   expect(post).toHaveBeenCalledWith('/tokens', {
     name: 'Automation',
     scopes: ['write'],
@@ -102,6 +106,17 @@ it('creates, copies, lists a token, and resets the form for the next token', asy
   expect(screen.getByRole('combobox', { name: 'Scope' })).toHaveTextContent('Read');
   expect(screen.getByLabelText('Expires in days')).toHaveValue(30);
   expect(screen.queryByLabelText('New API token')).not.toBeInTheDocument();
+});
+
+it('allows Escape to dismiss the creation form before a secret is issued', async () => {
+  setupTokens();
+  const post = vi.spyOn(api, 'post');
+  const user = userEvent.setup();
+  renderWithQuery(<ApiTokens />);
+  await openCreate(user);
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(post).not.toHaveBeenCalled();
 });
 
 it('keeps form entries when creation fails so the request can be retried', async () => {

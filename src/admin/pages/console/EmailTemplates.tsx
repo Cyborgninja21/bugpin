@@ -287,7 +287,8 @@ export function EmailTemplates() {
 
   useEffect(() => {
     if (!isLicensed || !defaults) return;
-    if (initializedType.current === selectedType && hasChanges) return;
+    const typeChanged = initializedType.current !== selectedType;
+    if (!typeChanged && hasChanges) return;
     const next = emptyDraft();
     for (const code of SUPPORTED_LOCALES) {
       const entry = customTemplates?.[selectedType]?.[code] ?? defaults[code] ?? defaults.en;
@@ -300,7 +301,7 @@ export function EmailTemplates() {
     setResetLocales(new Set());
     setShowPreview(false);
     setPreviewData(null);
-    setActiveLocale('en');
+    if (typeChanged) setActiveLocale('en');
   }, [customTemplates, selectedType, isLicensed, defaults, hasChanges]);
 
   const saveMutation = useMutation({

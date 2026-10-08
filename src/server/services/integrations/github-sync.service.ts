@@ -77,8 +77,13 @@ export const githubSyncService = {
 
     const githubConfig = integration.config as GitHubIntegrationConfig;
 
+    await reportsRepo.markPendingSync(reportId);
+
     // Load report files
     const files = await filesRepo.findByReportId(reportId);
+
+    const syncAccess = checkProjectLicense(report.projectId);
+    if (!syncAccess.success) return syncAccess;
 
     try {
       let result: SyncResult;
@@ -95,6 +100,9 @@ export const githubSyncService = {
             fileTransferMode: githubConfig.fileTransferMode,
           }
         );
+
+        const updateAccess = checkProjectLicense(report.projectId);
+        if (!updateAccess.success) return updateAccess;
 
         if (!updateResult.success) {
           // Mark as error
@@ -126,6 +134,9 @@ export const githubSyncService = {
           }
         );
 
+        const createAccess = checkProjectLicense(report.projectId);
+        if (!createAccess.success) return createAccess;
+
         if (!createResult.success) {
           // Mark as error
           await reportsRepo.updateGitHubSyncStatus(reportId, {
@@ -144,12 +155,18 @@ export const githubSyncService = {
         };
       }
 
+      const resultAccess = checkProjectLicense(report.projectId);
+      if (!resultAccess.success) return resultAccess;
+
       // Update report with sync status
       await reportsRepo.updateGitHubSyncStatus(reportId, {
         status: 'synced',
         issueNumber: result.issueNumber,
         issueUrl: result.issueUrl,
       });
+
+      const usageAccess = checkProjectLicense(report.projectId);
+      if (!usageAccess.success) return usageAccess;
 
       // Update integration usage
       await integrationsRepo.updateLastUsed(integrationId);
@@ -163,6 +180,9 @@ export const githubSyncService = {
       return Result.ok(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+
+      const errorAccess = checkProjectLicense(report.projectId);
+      if (!errorAccess.success) return errorAccess;
 
       // Mark as error
       await reportsRepo.updateGitHubSyncStatus(reportId, {
@@ -184,9 +204,6 @@ export const githubSyncService = {
     let failed = 0;
 
     for (const reportId of reportIds) {
-      // Mark as pending
-      await reportsRepo.markPendingSync(reportId);
-
       const result = await this.syncReport(reportId, integrationId);
 
       if (result.success) {

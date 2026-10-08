@@ -30,11 +30,14 @@ test('acceptance uses the authenticated administrator and server time', () => {
       acceptedBy: 'other-user',
       acceptedAt: '2000-01-01',
     },
-    'admin'
+    'admin',
+    { name: 'Administrator', email: 'admin@example.test' }
   );
   expect(result.success).toBe(true);
   if (!result.success) throw new Error(result.error);
   expect(result.value.acceptedBy).toBe('admin');
+  expect(result.value.acceptedByName).toBe('Administrator');
+  expect(result.value.acceptedByEmail).toBe('admin@example.test');
   expect(result.value.agreementUrl).toBe(ENTERPRISE_AGREEMENT_URL);
   expect(Date.parse(result.value.acceptedAt)).toBeGreaterThanOrEqual(start);
   expect(result.value.id).toMatch(/^[a-f0-9-]{36}$/);

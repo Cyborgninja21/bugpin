@@ -1,3 +1,5 @@
+import { checkProjectLicense } from '../../utils/project-license.js';
+import { integrationsRepo } from '../../database/repositories/integrations.repo.js';
 import { githubSyncService } from './github-sync.service.js';
 import { reportsRepo } from '../../database/repositories/reports.repo.js';
 import { logger } from '../../utils/logger.js';
@@ -33,29 +35,47 @@ export const syncQueueService = {
   /**
    * Add a report to the sync queue
    */
-  async enqueue(reportId: string, integrationId: string): Promise<void> {
-    // Check if already in queue
-    const existing = queue.find((t) => t.reportId === reportId);
-    if (existing) {
-      logger.debug('Report already in sync queue', { reportId });
-      return;
-    }
+  async enqueue(reportId: string, integrationId: string): Promise<Result<void>> {
+    const result = await this.enqueueBatch([reportId], integrationId);
+    return result.success ? Result.ok(undefined) : result;
+  },
 
-    const task: SyncTask = {
-      id: `${reportId}-${Date.now()}`,
+  async enqueueBatch(reportIds: string[], integrationId: string): Promise<Result<number>> {
+    if (!reportIds.every((id) => typeof id === 'string' && id.length > 0))
+      return Result.fail('Report IDs must be nonempty strings', 'INVALID_PARAMS');
+    const ids = [...new Set(reportIds)];
+    if (ids.length === 0) return Result.ok(0);
+    const integration = await integrationsRepo.findById(integrationId);
+    if (!integration) return Result.fail('Integration not found', 'NOT_FOUND');
+    for (const id of ids) {
+      const report = await reportsRepo.findById(id);
+      if (!report) return Result.fail('Report not found', 'NOT_FOUND');
+      if (report.projectId !== integration.projectId)
+        return Result.fail('Integration does not belong to this project', 'PROJECT_MISMATCH');
+    }
+    const access = checkProjectLicense(integration.projectId);
+    if (!access.success) return access;
+    const pendingIds = ids.filter((id) => !queue.some((task) => task.reportId === id));
+    if (pendingIds.length === 0) return Result.ok(0);
+    const now = Date.now();
+    const tasks: SyncTask[] = pendingIds.map((reportId) => ({
+      id: `${reportId}-${now}`,
       reportId,
       integrationId,
-      createdAt: Date.now(),
+      createdAt: now,
       attempts: 0,
-      nextAttempt: Date.now(),
-    };
-
-    queue.push(task);
-
-    // Mark report as pending
-    await reportsRepo.markPendingSync(reportId);
-
-    logger.info('Added report to sync queue', { reportId, integrationId });
+      nextAttempt: now,
+    }));
+    try {
+      // Persist the entire batch before publishing tasks, without yielding to the queue processor.
+      reportsRepo.markPendingSyncBatch(pendingIds);
+    } catch (error) {
+      logger.error('Failed to mark reports pending for sync', { error });
+      return Result.fail('Could not queue reports for sync', 'QUEUE_FAILED');
+    }
+    for (const task of tasks) queue.push(task);
+    logger.info('Added reports to sync queue', { count: tasks.length, integrationId });
+    return Result.ok(tasks.length);
   },
 
   /**
@@ -204,9 +224,6 @@ export const syncQueueService = {
    * Retry sync for a specific report (validates integration exists)
    */
   async retrySyncForReport(reportId: string): Promise<Result<void>> {
-    // Import here to avoid circular dependency issues
-    const { integrationsRepo } = await import('../../database/repositories/integrations.repo.js');
-
     // Get report
     const report = await reportsRepo.findById(reportId);
     if (!report) {
@@ -222,8 +239,6 @@ export const syncQueueService = {
     }
 
     // Queue for sync
-    await this.enqueue(reportId, githubIntegration.id);
-
-    return Result.ok(undefined);
+    return this.enqueue(reportId, githubIntegration.id);
   },
 };

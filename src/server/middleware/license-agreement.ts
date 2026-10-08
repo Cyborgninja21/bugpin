@@ -27,7 +27,8 @@ export const requireLicenseAgreement: MiddlewareHandler = async (c, next) => {
   const body: unknown = await c.req.json().catch(() => null);
   const agreement =
     body && typeof body === 'object' && 'agreement' in body ? body.agreement : undefined;
-  const result = createLicenseAgreementAcceptance(agreement, c.get('user').id);
+  const user = c.get('user');
+  const result = createLicenseAgreementAcceptance(agreement, user.id, user);
   if (!result.success) {
     return c.json({ success: false, error: result.code, message: result.error }, 400);
   }

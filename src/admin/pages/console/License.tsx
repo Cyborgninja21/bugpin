@@ -463,17 +463,6 @@ export function License() {
                   />
                 </div>
               )}
-              {status?.message === 'License expired' && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => syncMutation.mutate()}
-                  disabled={syncMutation.isPending || activateMutation.isPending}
-                >
-                  {syncMutation.isPending && <Spinner size="sm" />}
-                  Sync installed license
-                </Button>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="license-key">License Key</Label>
                 <Textarea

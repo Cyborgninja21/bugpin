@@ -551,6 +551,21 @@ export const reportsRepo = {
     ]);
   },
 
+  markPendingSyncBatch(ids: string[]): void {
+    const db = getDb();
+    const update = db.query(
+      'UPDATE reports SET github_sync_status = ?, updated_at = ? WHERE id = ? RETURNING id'
+    );
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      for (const id of ids) {
+        if (!update.get('pending', now, id)) {
+          throw new Error('Report no longer exists');
+        }
+      }
+    })();
+  },
+
   /**
    * Clear GitHub sync status (for manual mode)
    */

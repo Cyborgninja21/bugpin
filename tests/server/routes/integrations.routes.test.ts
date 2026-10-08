@@ -141,9 +141,9 @@ beforeEach(() => {
   githubSyncService.getUnsyncedCount = async () => 2;
   githubSyncService.getUnsyncedReportIds = async () => ['rpt_1', 'rpt_2'];
 
-  syncQueueService.enqueue = async (reportId, integrationId) => {
-    queuedReports.push({ reportId, integrationId });
-    return Result.ok(undefined);
+  syncQueueService.enqueueBatch = async (reportIds, integrationId) => {
+    queuedReports.push(...reportIds.map((reportId) => ({ reportId, integrationId })));
+    return Result.ok(reportIds.length);
   };
   syncQueueService.getStatus = () => ({
     queueLength: queuedReports.length,
@@ -520,6 +520,30 @@ describe('integrations routes', () => {
     });
     expect(res.status).toBe(200);
     expect(queuedReports).toHaveLength(2);
+    expect((await res.json()).queued).toBe(2);
+  });
+
+  it('reports a rejected batch without claiming that reports were queued', async () => {
+    syncQueueService.enqueueBatch = async () => Result.fail('Report not found', 'NOT_FOUND');
+    const res = await createApp().request('http://localhost/integrations/int_1/sync-existing', {
+      method: 'POST',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ reportIds: ['rpt_1', 'missing'] }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).success).toBe(false);
+    expect(queuedReports).toEqual([]);
+  });
+
+  it('returns the number of newly queued tasks instead of the requested count', async () => {
+    syncQueueService.enqueueBatch = async () => Result.ok(1);
+    const res = await createApp().request('http://localhost/integrations/int_1/sync-existing', {
+      method: 'POST',
+      headers: { cookie: 'session=sess_1', 'content-type': 'application/json' },
+      body: JSON.stringify({ reportIds: ['rpt_1', 'rpt_1'] }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).queued).toBe(1);
   });
 
   it('returns 400 when sync existing params are invalid', async () => {

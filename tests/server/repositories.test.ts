@@ -623,6 +623,21 @@ describe('reportsRepo', () => {
     expect(unsynced).toHaveLength(1);
   });
 
+  it('rolls back every pending status when a batch report disappears', async () => {
+    const project = await createProject('GitHub batch');
+    const report = await reportsRepo.create({
+      projectId: project.id,
+      title: 'Batch issue',
+      priority: 'low',
+      metadata: baseMetadata,
+    });
+    const before = await reportsRepo.findById(report.id);
+    expect(() => reportsRepo.markPendingSyncBatch([report.id, 'missing'])).toThrow();
+    expect(await reportsRepo.findById(report.id)).toEqual(before);
+    reportsRepo.markPendingSyncBatch([report.id]);
+    expect((await reportsRepo.findById(report.id))?.githubSyncStatus).toBe('pending');
+  });
+
   it('returns stats and bulk updates', async () => {
     const project = await createProject('Stats');
     const first = await reportsRepo.create({

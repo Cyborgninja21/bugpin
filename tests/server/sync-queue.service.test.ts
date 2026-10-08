@@ -35,9 +35,8 @@ beforeEach(() => {
     issueUrl: 'https://github.com/org/repo/issues/123',
   });
 
-  reportsRepo.markPendingSync = async (id) => {
-    markPendingIds.push(id);
-    return true;
+  reportsRepo.markPendingSyncBatch = (ids) => {
+    markPendingIds.push(...ids);
   };
 
   githubSyncService.syncReport = async () => syncResult;
@@ -72,6 +71,36 @@ describe('syncQueueService', () => {
     await syncQueueService.enqueue('rpt_1', 'int_1');
     const status = syncQueueService.getStatus();
     expect(status.queueLength).toBe(1);
+  });
+
+  it('rejects a batch containing a missing or mismatched report before changing pending state', async () => {
+    for (const invalid of [null, { id: 'rpt_2', projectId: 'prj_other' } as Report]) {
+      reportsRepo.findById = async (id) =>
+        id === 'rpt_1' ? ({ id, projectId: 'prj_1' } as Report) : invalid;
+      const result = await syncQueueService.enqueueBatch(['rpt_1', 'rpt_2'], 'int_1');
+      expect(result.success).toBe(false);
+      expect(markPendingIds).toEqual([]);
+      expect(syncQueueService.getStatus().queueLength).toBe(0);
+    }
+  });
+
+  it('does not publish any tasks when pending-state persistence fails', async () => {
+    reportsRepo.markPendingSyncBatch = () => {
+      throw new Error('Storage unavailable');
+    };
+    const result = await syncQueueService.enqueueBatch(['rpt_1', 'rpt_2'], 'int_1');
+    expect(result).toEqual(Result.fail('Could not queue reports for sync', 'QUEUE_FAILED'));
+    expect(syncQueueService.getStatus().queueLength).toBe(0);
+  });
+
+  it('deduplicates batches and concurrent retries, reporting only newly queued tasks', async () => {
+    const results = await Promise.all([
+      syncQueueService.enqueueBatch(['rpt_1', 'rpt_2', 'rpt_1'], 'int_1'),
+      syncQueueService.enqueueBatch(['rpt_1', 'rpt_2'], 'int_1'),
+    ]);
+    expect(results).toEqual([Result.ok(2), Result.ok(0)]);
+    expect(markPendingIds).toEqual(['rpt_1', 'rpt_2']);
+    expect(syncQueueService.getStatus().queueLength).toBe(2);
   });
 
   it('processes queue and removes successful tasks', async () => {

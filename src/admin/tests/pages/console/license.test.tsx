@@ -6,6 +6,31 @@ import { ENTERPRISE_AGREEMENT_VERSION, ENTERPRISE_AGREEMENT_URL } from '@shared/
 
 afterEach(() => vi.restoreAllMocks());
 
+it.each(['License has expired', 'License inactive', 'License verification required'])(
+  'allows syncing an installed license when the status message is %s',
+  async (message) => {
+    const status = { eeAvailable: true, licensed: false, installed: true, message };
+    vi.spyOn(licenseApi, 'getStatus').mockResolvedValue(status);
+    const sync = vi.spyOn(licenseApi, 'sync').mockResolvedValue(status);
+    const user = userEvent.setup();
+    renderWithQuery(<License />);
+    await user.click(await screen.findByRole('button', { name: 'Sync installed license' }));
+    await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+  }
+);
+
+it('does not offer installed-license sync when no license is installed', async () => {
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
+    eeAvailable: true,
+    licensed: false,
+    installed: false,
+    message: 'License expired',
+  });
+  renderWithQuery(<License />);
+  await screen.findByRole('button', { name: 'Activate License' });
+  expect(screen.queryByRole('button', { name: 'Sync installed license' })).not.toBeInTheDocument();
+});
+
 it('requires exact confirmation for removal, resets on dismissal, and prevents repeat requests', async () => {
   let licensed = true;
   let finishRemoval!: () => void;

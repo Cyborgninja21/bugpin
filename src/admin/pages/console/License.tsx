@@ -412,7 +412,7 @@ export function License() {
                   />
                 </div>
               )}
-              {status?.message === 'License expired' && (
+              {status?.installed && (
                 <Button
                   type="button"
                   variant="outline"

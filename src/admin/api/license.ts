@@ -3,6 +3,7 @@ import axios from 'axios';
 export interface LicenseStatus {
   eeAvailable: boolean;
   licensed: boolean;
+  installed?: boolean;
   message?: string;
   plan?: string;
   customerName?: string;

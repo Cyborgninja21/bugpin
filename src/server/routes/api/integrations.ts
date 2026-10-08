@@ -389,17 +389,17 @@ integrations.post(
       });
     }
 
-    // Queue reports for sync
-    for (const reportId of reportIds) {
-      const result = await syncQueueService.enqueue(reportId, id);
-      if (!result.success)
-        return c.json({ success: false, error: result.code, message: result.error }, 400);
-    }
+    const result = await syncQueueService.enqueueBatch(reportIds, id);
+    if (!result.success)
+      return c.json(
+        { success: false, error: result.code, message: result.error },
+        result.code === 'QUEUE_FAILED' ? 500 : 400
+      );
 
     return c.json({
       success: true,
-      message: `Queued ${reportIds.length} reports for sync`,
-      queued: reportIds.length,
+      message: `Queued ${result.value} reports for sync`,
+      queued: result.value,
     });
   }
 );

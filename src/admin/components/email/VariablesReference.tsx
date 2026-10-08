@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { ScrollArea } from '../ui/scroll-area';
 import { Button } from '../ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 
@@ -67,7 +68,7 @@ export function VariablesReference({ variables, defaultOpen = false }: Variables
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
-        <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+        <ScrollArea className="border rounded-lg max-h-64" contentClassName="divide-y">
           {variables.map((variable) => (
             <div
               key={variable}
@@ -97,7 +98,7 @@ export function VariablesReference({ variables, defaultOpen = false }: Variables
               </Button>
             </div>
           ))}
-        </div>
+        </ScrollArea>
       </CollapsibleContent>
     </Collapsible>
   );

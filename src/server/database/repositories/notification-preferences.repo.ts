@@ -1,6 +1,12 @@
 import { randomUUID } from 'crypto';
 import { getDb } from '../database.js';
-import type { NotificationPreferences, ProjectNotificationDefaults } from '@shared/types';
+import type {
+  NotificationDefaultSettings,
+  NotificationPreferences,
+  ProjectNotificationDefaults,
+} from '@shared/types';
+
+const toFlag = (value: boolean): number => (value ? 1 : 0);
 
 // Database Row Types
 
@@ -96,33 +102,48 @@ export const notificationPreferencesRepo = {
 
   /**
    * Get all users who should be notified for a project.
-   * Includes active users without explicit preferences (defaults are all enabled).
+   * Users without a preferences row inherit project defaults, then global defaults.
    */
-  async findByProjectWithEmailEnabled(projectId: string): Promise<NotificationPreferences[]> {
+  async findByProjectWithEmailEnabled(
+    projectId: string,
+    globalDefaults: NotificationDefaultSettings
+  ): Promise<NotificationPreferences[]> {
     const db = getDb();
 
-    // LEFT JOIN users with their notification preferences for this project.
-    // Users without a preferences row are treated as having all notifications enabled (matching DB defaults).
+    // LEFT JOIN users with their notification preferences and the project defaults.
+    // Precedence per flag: user preferences row -> project defaults -> global defaults.
     const rows = db
       .query(
         `SELECT
           COALESCE(np.id, 'default-' || u.id) as id,
           u.id as user_id,
           ? as project_id,
-          COALESCE(np.notify_on_new_report, 1) as notify_on_new_report,
-          COALESCE(np.notify_on_status_change, 1) as notify_on_status_change,
-          COALESCE(np.notify_on_priority_change, 1) as notify_on_priority_change,
-          COALESCE(np.notify_on_assignment, 1) as notify_on_assignment,
-          COALESCE(np.notify_on_deletion, 1) as notify_on_deletion,
-          COALESCE(np.email_enabled, 1) as email_enabled,
+          COALESCE(np.notify_on_new_report, pnd.default_notify_on_new_report, ?) as notify_on_new_report,
+          COALESCE(np.notify_on_status_change, pnd.default_notify_on_status_change, ?) as notify_on_status_change,
+          COALESCE(np.notify_on_priority_change, pnd.default_notify_on_priority_change, ?) as notify_on_priority_change,
+          COALESCE(np.notify_on_assignment, pnd.default_notify_on_assignment, ?) as notify_on_assignment,
+          COALESCE(np.notify_on_deletion, pnd.default_notify_on_deletion, ?) as notify_on_deletion,
+          COALESCE(np.email_enabled, pnd.default_email_enabled, ?) as email_enabled,
           COALESCE(np.created_at, u.created_at) as created_at,
           COALESCE(np.updated_at, u.updated_at) as updated_at
         FROM users u
         LEFT JOIN notification_preferences np ON np.user_id = u.id AND np.project_id = ?
+        LEFT JOIN project_notification_defaults pnd ON pnd.project_id = ?
         WHERE u.is_active = 1
-          AND COALESCE(np.email_enabled, 1) = 1`
+          AND COALESCE(np.email_enabled, pnd.default_email_enabled, ?) = 1`
       )
-      .all(projectId, projectId) as NotificationPreferencesRow[];
+      .all(
+        projectId,
+        toFlag(globalDefaults.notifyOnNewReport),
+        toFlag(globalDefaults.notifyOnStatusChange),
+        toFlag(globalDefaults.notifyOnPriorityChange),
+        toFlag(globalDefaults.notifyOnAssignment),
+        toFlag(globalDefaults.notifyOnDeletion),
+        toFlag(globalDefaults.emailEnabled),
+        projectId,
+        projectId,
+        toFlag(globalDefaults.emailEnabled)
+      ) as NotificationPreferencesRow[];
 
     return rows.map(mapRowToPreferences);
   },
@@ -135,7 +156,8 @@ export const notificationPreferencesRepo = {
     projectId: string,
     preferences: Partial<
       Omit<NotificationPreferences, 'id' | 'userId' | 'projectId' | 'createdAt' | 'updatedAt'>
-    >
+    >,
+    globalDefaults: NotificationDefaultSettings
   ): Promise<NotificationPreferences> {
     const db = getDb();
     const now = new Date().toISOString();
@@ -180,7 +202,7 @@ export const notificationPreferencesRepo = {
 
       return (await this.findByUserAndProject(userId, projectId))!;
     } else {
-      // Create with defaults from project or system defaults
+      // Create with defaults from project, then global defaults
       const defaults = await projectNotificationDefaultsRepo.findByProject(projectId);
 
       const id = randomUUID();
@@ -194,16 +216,34 @@ export const notificationPreferencesRepo = {
           id,
           userId,
           projectId,
-          (preferences.notifyOnNewReport ?? defaults?.defaultNotifyOnNewReport ?? true) ? 1 : 0,
-          (preferences.notifyOnStatusChange ?? defaults?.defaultNotifyOnStatusChange ?? true)
-            ? 1
-            : 0,
-          (preferences.notifyOnPriorityChange ?? defaults?.defaultNotifyOnPriorityChange ?? true)
-            ? 1
-            : 0,
-          (preferences.notifyOnAssignment ?? defaults?.defaultNotifyOnAssignment ?? true) ? 1 : 0,
-          (preferences.notifyOnDeletion ?? defaults?.defaultNotifyOnDeletion ?? true) ? 1 : 0,
-          (preferences.emailEnabled ?? defaults?.defaultEmailEnabled ?? true) ? 1 : 0,
+          toFlag(
+            preferences.notifyOnNewReport ??
+              defaults?.defaultNotifyOnNewReport ??
+              globalDefaults.notifyOnNewReport
+          ),
+          toFlag(
+            preferences.notifyOnStatusChange ??
+              defaults?.defaultNotifyOnStatusChange ??
+              globalDefaults.notifyOnStatusChange
+          ),
+          toFlag(
+            preferences.notifyOnPriorityChange ??
+              defaults?.defaultNotifyOnPriorityChange ??
+              globalDefaults.notifyOnPriorityChange
+          ),
+          toFlag(
+            preferences.notifyOnAssignment ??
+              defaults?.defaultNotifyOnAssignment ??
+              globalDefaults.notifyOnAssignment
+          ),
+          toFlag(
+            preferences.notifyOnDeletion ??
+              defaults?.defaultNotifyOnDeletion ??
+              globalDefaults.notifyOnDeletion
+          ),
+          toFlag(
+            preferences.emailEnabled ?? defaults?.defaultEmailEnabled ?? globalDefaults.emailEnabled
+          ),
           now,
           now,
         ]
@@ -228,13 +268,17 @@ export const notificationPreferencesRepo = {
   /**
    * Get or create preferences with defaults
    */
-  async getOrCreate(userId: string, projectId: string): Promise<NotificationPreferences> {
+  async getOrCreate(
+    userId: string,
+    projectId: string,
+    globalDefaults: NotificationDefaultSettings
+  ): Promise<NotificationPreferences> {
     const existing = await this.findByUserAndProject(userId, projectId);
     if (existing) {
       return existing;
     }
 
-    return this.upsert(userId, projectId, {});
+    return this.upsert(userId, projectId, {}, globalDefaults);
   },
 };
 

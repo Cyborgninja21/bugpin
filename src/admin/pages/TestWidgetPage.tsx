@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ScrollArea } from '../components/ui/scroll-area';
 import { useTheme } from '../contexts/ThemeContext';
 import { Spinner } from '../components/ui/spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -538,7 +539,7 @@ export function TestWidgetPage() {
           </header>
 
           {/* Scrollable Content Area */}
-          <div className="flex-1 overflow-y-auto p-8">
+          <ScrollArea className="flex-1" contentClassName="p-8">
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
               {STATS.map((stat) => (
@@ -888,7 +889,7 @@ export function TestWidgetPage() {
                 Enter Screenshot Mode (White Background)
               </Button>
             </div>
-          </div>
+          </ScrollArea>
         </main>
       </div>
     </div>

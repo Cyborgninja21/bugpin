@@ -38,7 +38,7 @@ export function ActivityDialog({ entries, isLoading }: ActivityDialogProps) {
             Activity
           </DialogTitle>
         </DialogHeader>
-        <DialogBody className="px-6 py-1">
+        <DialogBody contentClassName="px-6 py-1">
           <ReportHistoryTimeline entries={entries} isLoading={isLoading} />
         </DialogBody>
       </DialogContent>

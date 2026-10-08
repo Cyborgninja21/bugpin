@@ -18,7 +18,7 @@ import { integrationsRepo } from '../../src/server/database/repositories/integra
 import { reportsRepo } from '../../src/server/database/repositories/reports.repo';
 import { reportHistoryRepo } from '../../src/server/database/repositories/report-history.repo';
 import { filesRepo } from '../../src/server/database/repositories/files.repo';
-import { UNASSIGNED_FILTER } from '../../src/shared/types';
+import { UNASSIGNED_FILTER, type NotificationDefaultSettings } from '../../src/shared/types';
 import { webhooksRepo } from '../../src/server/database/repositories/webhooks.repo';
 import {
   notificationPreferencesRepo,
@@ -119,12 +119,12 @@ describe('projectsRepo', () => {
     expect(all).toHaveLength(1);
   });
 
-  it('applies default language settings on read when missing', async () => {
+  it('leaves language unset when the project has no override', async () => {
     const project = await projectsRepo.create({ name: 'NoLanguage' });
-    expect(project.settings.language).toEqual({ mode: 'auto', defaultLanguage: 'en' });
+    expect(project.settings.language).toBeUndefined();
 
     const fetched = await projectsRepo.findById(project.id);
-    expect(fetched?.settings.language).toEqual({ mode: 'auto', defaultLanguage: 'en' });
+    expect(fetched?.settings.language).toBeUndefined();
   });
 
   it('preserves stored language settings on read when present', async () => {
@@ -777,26 +777,44 @@ describe('webhooksRepo', () => {
 });
 
 describe('notificationPreferencesRepo', () => {
+  const allOn: NotificationDefaultSettings = {
+    emailEnabled: true,
+    notifyOnNewReport: true,
+    notifyOnStatusChange: true,
+    notifyOnPriorityChange: true,
+    notifyOnAssignment: true,
+    notifyOnDeletion: true,
+  };
+
   it('creates and updates preferences with defaults', async () => {
     const project = await createProject('Notifications');
     const user = await createUser('notify@example.com');
 
     await projectNotificationDefaultsRepo.upsert(project.id, { defaultEmailEnabled: false });
 
-    const created = await notificationPreferencesRepo.upsert(user.id, project.id, {
-      notifyOnAssignment: false,
-    });
+    const created = await notificationPreferencesRepo.upsert(
+      user.id,
+      project.id,
+      { notifyOnAssignment: false },
+      allOn
+    );
     expect(created.emailEnabled).toBe(false);
 
-    const updated = await notificationPreferencesRepo.upsert(user.id, project.id, {
-      emailEnabled: true,
-    });
+    const updated = await notificationPreferencesRepo.upsert(
+      user.id,
+      project.id,
+      { emailEnabled: true },
+      allOn
+    );
     expect(updated.emailEnabled).toBe(true);
 
     const byUser = await notificationPreferencesRepo.findByUser(user.id);
     expect(byUser).toHaveLength(1);
 
-    const enabled = await notificationPreferencesRepo.findByProjectWithEmailEnabled(project.id);
+    const enabled = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
+      project.id,
+      allOn
+    );
     expect(enabled).toHaveLength(1);
 
     const deleted = await notificationPreferencesRepo.delete(user.id, project.id);
@@ -807,11 +825,88 @@ describe('notificationPreferencesRepo', () => {
     const project = await createProject('Defaults');
     const user = await createUser('defaults@example.com');
 
-    const prefs = await notificationPreferencesRepo.getOrCreate(user.id, project.id);
+    const prefs = await notificationPreferencesRepo.getOrCreate(user.id, project.id, allOn);
     expect(prefs.notifyOnNewReport).toBe(true);
 
     const removed = await projectNotificationDefaultsRepo.delete(project.id);
     expect(removed).toBe(false);
+  });
+
+  it('falls back to global defaults for users without preferences', async () => {
+    const project = await createProject('Global defaults');
+    await createUser('global@example.com');
+
+    const recipients = await notificationPreferencesRepo.findByProjectWithEmailEnabled(project.id, {
+      ...allOn,
+      notifyOnStatusChange: false,
+    });
+    expect(recipients).toHaveLength(1);
+    expect(recipients[0].notifyOnStatusChange).toBe(false);
+    expect(recipients[0].notifyOnNewReport).toBe(true);
+  });
+
+  it('prefers project defaults over global defaults', async () => {
+    const project = await createProject('Project defaults');
+    await createUser('project-defaults@example.com');
+
+    await projectNotificationDefaultsRepo.upsert(project.id, {
+      defaultNotifyOnStatusChange: false,
+    });
+    const disabled = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
+      project.id,
+      allOn
+    );
+    expect(disabled[0].notifyOnStatusChange).toBe(false);
+
+    await projectNotificationDefaultsRepo.upsert(project.id, {
+      defaultNotifyOnStatusChange: true,
+    });
+    const enabled = await notificationPreferencesRepo.findByProjectWithEmailEnabled(project.id, {
+      ...allOn,
+      notifyOnStatusChange: false,
+    });
+    expect(enabled[0].notifyOnStatusChange).toBe(true);
+  });
+
+  it('prefers user preferences over defaults', async () => {
+    const project = await createProject('User preferences');
+    const user = await createUser('user-preferences@example.com');
+    const globalOff = { ...allOn, notifyOnStatusChange: false };
+
+    await notificationPreferencesRepo.upsert(
+      user.id,
+      project.id,
+      { notifyOnStatusChange: true },
+      globalOff
+    );
+    const recipients = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
+      project.id,
+      globalOff
+    );
+    expect(recipients).toHaveLength(1);
+    expect(recipients[0].notifyOnStatusChange).toBe(true);
+  });
+
+  it('excludes users whose effective emailEnabled is false', async () => {
+    const project = await createProject('Email disabled');
+    await createUser('email-disabled@example.com');
+
+    const recipients = await notificationPreferencesRepo.findByProjectWithEmailEnabled(project.id, {
+      ...allOn,
+      emailEnabled: false,
+    });
+    expect(recipients).toEqual([]);
+  });
+
+  it('creates preference rows from global defaults when no project defaults exist', async () => {
+    const project = await createProject('Global row defaults');
+    const user = await createUser('global-row@example.com');
+
+    const prefs = await notificationPreferencesRepo.getOrCreate(user.id, project.id, {
+      ...allOn,
+      notifyOnStatusChange: false,
+    });
+    expect(prefs.notifyOnStatusChange).toBe(false);
   });
 });
 

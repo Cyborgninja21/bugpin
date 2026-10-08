@@ -10,6 +10,7 @@ import { Result } from '../utils/result.js';
 import { logger } from '../utils/logger.js';
 import { isValidEmail } from '../utils/validators.js';
 import type {
+  NotificationDefaultSettings,
   NotificationPreferences,
   ProjectNotificationDefaults,
   Project,
@@ -42,6 +43,11 @@ export interface UpdateProjectNotificationDefaultsInput {
 }
 
 // Helpers
+
+async function getGlobalNotificationDefaults(): Promise<NotificationDefaultSettings> {
+  const settings = await settingsCacheService.getAll();
+  return settings.notifications;
+}
 
 function getEffectiveReporterSettings(
   globalSettings: AppSettings,
@@ -128,7 +134,11 @@ export const notificationsService = {
     }
 
     // Get or create preferences with defaults
-    const preferences = await notificationPreferencesRepo.getOrCreate(userId, projectId);
+    const preferences = await notificationPreferencesRepo.getOrCreate(
+      userId,
+      projectId,
+      await getGlobalNotificationDefaults()
+    );
 
     return Result.ok(preferences);
   },
@@ -155,7 +165,12 @@ export const notificationsService = {
       return Result.fail('Project not found', 'PROJECT_NOT_FOUND');
     }
 
-    const preferences = await notificationPreferencesRepo.upsert(userId, projectId, input);
+    const preferences = await notificationPreferencesRepo.upsert(
+      userId,
+      projectId,
+      input,
+      await getGlobalNotificationDefaults()
+    );
 
     logger.info('User notification preferences updated', {
       userId,
@@ -230,7 +245,8 @@ export const notificationsService = {
 
       // Get all users with email notifications enabled for this project
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
-        report.projectId
+        report.projectId,
+        await getGlobalNotificationDefaults()
       );
 
       logger.debug('Found notification preferences for project', {
@@ -317,7 +333,8 @@ export const notificationsService = {
       });
 
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
-        report.projectId
+        report.projectId,
+        await getGlobalNotificationDefaults()
       );
 
       logger.debug('Found notification preferences for status change', {
@@ -411,9 +428,21 @@ export const notificationsService = {
         report.projectId
       );
 
-      // If no explicit preferences exist, treat as enabled (matching DB defaults)
-      const emailEnabled = preferences ? preferences.emailEnabled : true;
-      const notifyOnAssignment = preferences ? preferences.notifyOnAssignment : true;
+      // No user row: inherit project defaults, then global defaults
+      let emailEnabled: boolean;
+      let notifyOnAssignment: boolean;
+      if (preferences) {
+        emailEnabled = preferences.emailEnabled;
+        notifyOnAssignment = preferences.notifyOnAssignment;
+      } else {
+        const projectDefaults = await projectNotificationDefaultsRepo.findByProject(
+          report.projectId
+        );
+        const globalDefaults = await getGlobalNotificationDefaults();
+        emailEnabled = projectDefaults?.defaultEmailEnabled ?? globalDefaults.emailEnabled;
+        notifyOnAssignment =
+          projectDefaults?.defaultNotifyOnAssignment ?? globalDefaults.notifyOnAssignment;
+      }
 
       if (!emailEnabled || !notifyOnAssignment) {
         logger.info('Skipping assignment notification - preferences disabled', {
@@ -483,7 +512,8 @@ export const notificationsService = {
       });
 
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
-        report.projectId
+        report.projectId,
+        await getGlobalNotificationDefaults()
       );
 
       logger.debug('Found notification preferences for priority change', {
@@ -763,7 +793,8 @@ export const notificationsService = {
       });
 
       const preferences = await notificationPreferencesRepo.findByProjectWithEmailEnabled(
-        report.projectId
+        report.projectId,
+        await getGlobalNotificationDefaults()
       );
 
       const usersToNotify = preferences.filter((p) => p.notifyOnDeletion);
@@ -879,8 +910,14 @@ export const notificationsService = {
     const projects = await projectsRepo.findAll();
     const results: NotificationPreferences[] = [];
 
+    const globalDefaults = await getGlobalNotificationDefaults();
     for (const project of projects) {
-      const prefs = await notificationPreferencesRepo.upsert(userId, project.id, input);
+      const prefs = await notificationPreferencesRepo.upsert(
+        userId,
+        project.id,
+        input,
+        globalDefaults
+      );
       results.push(prefs);
     }
 

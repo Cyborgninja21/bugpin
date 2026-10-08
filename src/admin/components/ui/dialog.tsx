@@ -3,6 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
+import { ScrollArea } from './scroll-area';
 
 const Dialog = DialogPrimitive.Root;
 
@@ -59,8 +60,16 @@ const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 );
 DialogHeader.displayName = 'DialogHeader';
 
-const DialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('-mx-6 min-h-0 overflow-y-auto px-8', className)} {...props} />
+const DialogBody = ({
+  className,
+  contentClassName,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof ScrollArea>) => (
+  <ScrollArea
+    className={cn('-mx-6', className)}
+    contentClassName={cn('px-8', contentClassName)}
+    {...props}
+  />
 );
 DialogBody.displayName = 'DialogBody';
 

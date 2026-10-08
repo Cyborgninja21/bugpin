@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { ScrollArea } from '../../components/ui/scroll-area';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIntegrations, useForwardReport } from '../../hooks/useIntegrations';
@@ -609,7 +610,7 @@ export function ReportDetail() {
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="pt-4">
-                    <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                    <ScrollArea className="max-h-[600px]" contentClassName="space-y-2 pr-2">
                       {consoleErrors.map(
                         (
                           err: { type: string; message: string; source?: string; line?: number },
@@ -636,7 +637,7 @@ export function ReportDetail() {
                           </div>
                         )
                       )}
-                    </div>
+                    </ScrollArea>
                   </CardContent>
                 </CollapsibleContent>
               </Card>
@@ -719,7 +720,7 @@ export function ReportDetail() {
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="pt-4">
-                    <div className="space-y-2 max-h-[480px] overflow-y-auto pr-2">
+                    <ScrollArea className="max-h-[480px]" contentClassName="space-y-2 pr-2">
                       {userActivity.map(
                         (
                           activity: {
@@ -806,7 +807,7 @@ export function ReportDetail() {
                           </div>
                         )
                       )}
-                    </div>
+                    </ScrollArea>
                   </CardContent>
                 </CollapsibleContent>
               </Card>
@@ -843,7 +844,7 @@ export function ReportDetail() {
                   </CardHeader>
                   <CollapsibleContent>
                     <CardContent className="pt-4">
-                      <div className="max-h-[400px] overflow-y-auto">
+                      <ScrollArea className="max-h-[400px]">
                         <table className="w-full text-sm">
                           <thead className="sticky top-0 bg-background">
                             <tr className="border-b">
@@ -892,7 +893,7 @@ export function ReportDetail() {
                             )}
                           </tbody>
                         </table>
-                      </div>
+                      </ScrollArea>
                     </CardContent>
                   </CollapsibleContent>
                 </Card>

@@ -7,7 +7,8 @@ import { Result } from '../utils/result.js';
 
 export function createLicenseAgreementAcceptance(
   input: unknown,
-  userId: string
+  userId: string,
+  actor?: { name: string; email: string }
 ): Result<EnterpriseLicenseAcceptance> {
   if (
     !input ||
@@ -28,5 +29,6 @@ export function createLicenseAgreementAcceptance(
     agreementUrl: ENTERPRISE_AGREEMENT_URL,
     acceptedAt: new Date().toISOString(),
     acceptedBy: userId,
+    ...(actor ? { acceptedByName: actor.name, acceptedByEmail: actor.email } : {}),
   });
 }

@@ -209,7 +209,7 @@ it('requires exact confirmation for removal, resets on dismissal, and prevents r
   );
 });
 
-it('asks for project selection before activating an over-capacity license', async () => {
+it('keeps project selection and agreement acceptance in the dialog through an activation retry', async () => {
   const projects = [
     { id: 'proj_one', name: 'Project One' },
     { id: 'proj_two', name: 'Project Two' },
@@ -229,6 +229,9 @@ it('asks for project selection before activating an over-capacity license', asyn
     .mockRejectedValueOnce({
       response: { data: { error: 'PROJECT_SELECTION_REQUIRED', projectLimit: 1, projects } },
     })
+    .mockRejectedValueOnce({
+      response: { data: { message: 'Could not record agreement acceptance. Please try again.' } },
+    })
     .mockImplementationOnce(async () => {
       licensed = true;
     });
@@ -242,14 +245,26 @@ it('asks for project selection before activating an over-capacity license', asyn
   await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   await user.click(await screen.findByRole('checkbox', { name: 'Project One' }));
   expect(screen.getByRole('checkbox', { name: 'Project Two' })).toBeDisabled();
-  await user.click(screen.getByRole('button', { name: 'Activate License' }));
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  expect(
+    screen.getByRole('checkbox', { name: 'I accept the BugPin Enterprise License Agreement.' })
+  ).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   await waitFor(() =>
     expect(activate).toHaveBeenLastCalledWith('test-license', ['proj_one'], {
       accepted: true,
       version: ENTERPRISE_AGREEMENT_VERSION,
     })
   );
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Agree & Activate' })).toBeEnabled());
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'Project One' })).toBeChecked();
+  expect(
+    screen.getByRole('checkbox', { name: 'I accept the BugPin Enterprise License Agreement.' })
+  ).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   expect(await screen.findByText('1 of 1 projects used')).toBeInTheDocument();
+  expect(activate).toHaveBeenCalledTimes(3);
 });
 
 it('syncs an increased allowance without reactivation and lets the admin allocate the new slot', async () => {

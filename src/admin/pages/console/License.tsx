@@ -102,7 +102,6 @@ export function License() {
         typeof details.projectLimit === 'number' &&
         details.projects
       ) {
-        setAgreementOpen(false);
         setActivationSelection({ projectLimit: details.projectLimit, projects: details.projects });
         setSelectedIds([]);
         return;
@@ -176,12 +175,8 @@ export function License() {
       toast.error('Please enter a license key');
       return;
     }
-    if (activationSelection && agreementAccepted) {
-      confirmActivation();
-    } else {
-      setAgreementAccepted(false);
-      setAgreementOpen(true);
-    }
+    setAgreementAccepted(false);
+    setAgreementOpen(true);
   };
 
   const confirmActivation = () => {
@@ -449,20 +444,6 @@ export function License() {
             </div>
           ) : (
             <form onSubmit={handleActivate} className="space-y-4">
-              {activationSelection && (
-                <div className="space-y-3">
-                  <p className="font-medium">
-                    Choose up to {activationSelection.projectLimit} projects to keep available
-                  </p>
-                  <ProjectSelection
-                    projects={activationSelection.projects}
-                    limit={activationSelection.projectLimit}
-                    selectedIds={selectedIds ?? []}
-                    onChange={setSelectedIds}
-                    disabled={activateMutation.isPending}
-                  />
-                </div>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="license-key">License Key</Label>
                 <Textarea
@@ -510,11 +491,53 @@ export function License() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
-            <AlertDialogDescription>
-              Review the Enterprise License Agreement before activating this license. If you act for
-              another person or an organization, you must be authorized to accept on their behalf.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Review the Enterprise License Agreement before activating this license. If you act
+                  for another person or an organization, you must be authorized to accept on their
+                  behalf.
+                </p>
+                <p>
+                  <strong className="font-medium text-foreground">
+                    Activating binds this license to this installation.
+                  </strong>{' '}
+                  This key cannot be used on another installation. To move your license, you must
+                  replace (rotate) the key first.
+                </p>
+                <p>
+                  Sign in to the{' '}
+                  <a
+                    href="https://bugpin.io/portal/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    customer portal
+                  </a>
+                  , find your license, and choose{' '}
+                  <strong>Replace license for another server</strong>. Type <strong>replace</strong>{' '}
+                  to confirm, then copy or download the new key and activate it on the new
+                  installation. The old key is revoked. Replacement is available once every 24
+                  hours.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {activationSelection && (
+            <div className="space-y-3">
+              <p className="font-medium">
+                Choose up to {activationSelection.projectLimit} projects to keep available
+              </p>
+              <ProjectSelection
+                projects={activationSelection.projects}
+                limit={activationSelection.projectLimit}
+                selectedIds={selectedIds ?? []}
+                onChange={setSelectedIds}
+                disabled={activateMutation.isPending}
+              />
+            </div>
+          )}
           <div className="flex items-center gap-3 py-2">
             <Checkbox
               id="enterprise-license-agreement"

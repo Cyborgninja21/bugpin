@@ -170,6 +170,18 @@ describe('projectsService.update', () => {
     expect(result.success).toBe(false);
   });
 
+  it('clears an existing language override when language is null', async () => {
+    projectById = {
+      ...baseProject,
+      settings: { ...baseProject.settings, language: { mode: 'manual', defaultLanguage: 'de' } },
+    };
+
+    const result = await projectsService.update('prj_1', { settings: { language: null } });
+
+    expect(result.success).toBe(true);
+    expect(lastProjectUpdates?.settings?.language).toBeNull();
+  });
+
   it('returns UPDATE_FAILED when repo update fails', async () => {
     updateReturnsProject = null;
     const result = await projectsService.update('prj_1', { name: 'New' });

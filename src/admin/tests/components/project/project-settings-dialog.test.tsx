@@ -143,10 +143,14 @@ const notificationDefaults: ProjectNotificationDefaults = {
   updatedAt: new Date().toISOString(),
 };
 
-function setupMockResponses(defaults: ProjectNotificationDefaults | null, euPrivacyMode = false) {
+function setupMockResponses(
+  defaults: ProjectNotificationDefaults | null,
+  euPrivacyMode = false,
+  project: Project = baseProject
+) {
   mockGet.mockImplementation((url: string) => {
     if (url === '/projects/project-1') {
-      return Promise.resolve({ data: { project: baseProject } });
+      return Promise.resolve({ data: { project } });
     }
     if (url === '/settings') {
       return Promise.resolve({
@@ -156,6 +160,7 @@ function setupMockResponses(defaults: ProjectNotificationDefaults | null, euPriv
             widgetLauncherButton: {},
             screenshot: {},
             privacy: { euPrivacyMode },
+            language: { mode: 'manual', defaultLanguage: 'de' },
           },
         },
       });
@@ -350,6 +355,93 @@ describe('ProjectSettingsDialog', () => {
       expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
         settings: expect.objectContaining({
           defaultAssigneeUserId: 'user-1',
+        }),
+      });
+    });
+  });
+
+  it('keeps a project without language override inheriting the global language', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(
+      <ProjectSettingsDialog
+        project={{ id: 'project-1', name: 'Project' }}
+        open={true}
+        onOpenChange={() => undefined}
+        defaultTab="language"
+      />
+    );
+
+    const customSwitch = await screen.findByRole('switch', { name: /use custom settings/i });
+    expect(customSwitch).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.queryByRole('combobox', { name: /default language/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
+        settings: expect.objectContaining({ language: null }),
+      });
+    });
+  });
+
+  it('clears an existing language override when custom settings are disabled', async () => {
+    setupMockResponses(notificationDefaults, false, {
+      ...baseProject,
+      settings: { ...baseProject.settings, language: { mode: 'auto', defaultLanguage: 'fr' } },
+    });
+    const user = userEvent.setup();
+
+    renderWithQuery(
+      <ProjectSettingsDialog
+        project={{ id: 'project-1', name: 'Project' }}
+        open={true}
+        onOpenChange={() => undefined}
+        defaultTab="language"
+      />
+    );
+
+    const customSwitch = await screen.findByRole('switch', { name: /use custom settings/i });
+    expect(customSwitch).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByRole('combobox', { name: /default language/i })).toHaveTextContent(
+      'Français'
+    );
+
+    await user.click(customSwitch);
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
+        settings: expect.objectContaining({ language: null }),
+      });
+    });
+  });
+
+  it('starts a new language override from the global language', async () => {
+    setupMockResponses(notificationDefaults);
+    const user = userEvent.setup();
+
+    renderWithQuery(
+      <ProjectSettingsDialog
+        project={{ id: 'project-1', name: 'Project' }}
+        open={true}
+        onOpenChange={() => undefined}
+        defaultTab="language"
+      />
+    );
+
+    await user.click(await screen.findByRole('switch', { name: /use custom settings/i }));
+    expect(screen.getByRole('combobox', { name: /default language/i })).toHaveTextContent(
+      'Deutsch'
+    );
+
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith('/projects/project-1', {
+        settings: expect.objectContaining({
+          language: { mode: 'manual', defaultLanguage: 'de' },
         }),
       });
     });

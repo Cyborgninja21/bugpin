@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../api/client';
+import { Alert, AlertDescription } from '../../components/ui/alert';
 import {
   Card,
   CardContent,
@@ -22,11 +24,6 @@ import { Spinner } from '../../components/ui/spinner';
 import { SUPPORTED_LOCALES } from '@shared/types';
 import type { AppSettings, LocaleCode, ProjectLanguageSettings } from '@shared/types';
 
-const DEFAULT_LANGUAGE: ProjectLanguageSettings = {
-  mode: 'auto',
-  defaultLanguage: 'en',
-};
-
 const LOCALE_DISPLAY_LABELS: Record<LocaleCode, string> = {
   en: 'English',
   de: 'Deutsch',
@@ -39,10 +36,12 @@ const LOCALE_DISPLAY_LABELS: Record<LocaleCode, string> = {
 };
 
 export function Language() {
-  const queryClient = useQueryClient();
-  const [language, setLanguage] = useState<ProjectLanguageSettings>(DEFAULT_LANGUAGE);
-
-  const { data: settings, isLoading } = useQuery({
+  const {
+    data: settings,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
       const response = await api.get('/settings');
@@ -50,11 +49,56 @@ export function Language() {
     },
   });
 
-  useEffect(() => {
-    if (settings?.language) {
-      setLanguage(settings.language);
-    }
-  }, [settings]);
+  if (isLoading) {
+    return (
+      <Card className="max-w-4xl">
+        <CardContent className="py-12">
+          <Spinner className="mx-auto text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Never mount the form with fallback values: its state is initialized once, so a later
+  // successful load would not reach it and saving would overwrite the stored language.
+  if (!settings) {
+    return (
+      <Card className="max-w-4xl">
+        <CardHeader>
+          <CardTitle>Widget Language</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Language settings could not be loaded. No changes can be saved until the current
+              settings are available.
+            </AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+            {isFetching ? (
+              <>
+                <Spinner size="sm" className="mr-2" />
+                Retrying...
+              </>
+            ) : (
+              'Retry'
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <LanguageForm initialLanguage={settings.language} />;
+}
+
+// Mounted only once settings are loaded: the Radix Select must receive the stored value on
+// its first render. Changing its value programmatically after mount (e.g. syncing state in a
+// useEffect) makes its hidden native <select> emit onValueChange('') and clears the selection.
+function LanguageForm({ initialLanguage }: { initialLanguage: ProjectLanguageSettings }) {
+  const queryClient = useQueryClient();
+  const [language, setLanguage] = useState<ProjectLanguageSettings>(initialLanguage);
 
   const mutation = useMutation({
     mutationFn: async (data: Partial<AppSettings>) => {
@@ -74,16 +118,6 @@ export function Language() {
     e.preventDefault();
     mutation.mutate({ language });
   };
-
-  if (isLoading) {
-    return (
-      <Card className="max-w-4xl">
-        <CardContent className="py-12">
-          <Spinner className="mx-auto text-primary" />
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card className="max-w-4xl">

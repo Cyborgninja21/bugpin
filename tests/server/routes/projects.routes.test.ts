@@ -182,6 +182,20 @@ describe('projects routes', () => {
     });
   });
 
+  it('accepts null language on PATCH to clear the project override', async () => {
+    const app = createApp();
+    const res = await app.request('http://localhost/projects/prj_1', {
+      method: 'PATCH',
+      headers: {
+        cookie: 'session=sess_1',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ settings: { language: null } }),
+    });
+    expect(res.status).toBe(200);
+    expect(lastUpdateBody).toEqual({ settings: { language: null } });
+  });
+
   it('rejects an invalid language defaultLanguage on PATCH', async () => {
     const app = createApp();
     const res = await app.request('http://localhost/projects/prj_1', {

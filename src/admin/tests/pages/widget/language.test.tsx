@@ -51,4 +51,43 @@ describe('Widget Language page', () => {
       });
     });
   });
+
+  it('shows an error instead of the form when loading fails, and recovers on retry', async () => {
+    const user = userEvent.setup();
+    let failNext = true;
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url === '/settings') {
+        if (failNext) {
+          failNext = false;
+          throw new Error('Network Error');
+        }
+        return {
+          data: {
+            success: true,
+            settings: { language: { mode: 'manual', defaultLanguage: 'de' } },
+          },
+        };
+      }
+      return { data: {} };
+    });
+    const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } });
+
+    renderWithProviders(<Language />);
+
+    expect(await screen.findByText(/language settings could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /default language/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+
+    const trigger = await screen.findByRole('combobox', { name: /default language/i });
+    await waitFor(() => expect(trigger).toHaveTextContent('Deutsch'));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalledWith('/settings', {
+        language: { mode: 'manual', defaultLanguage: 'de' },
+      });
+    });
+  });
 });

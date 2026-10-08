@@ -138,7 +138,11 @@ export async function initializeEE(): Promise<void> {
         const licenseService = getEELicenseService();
         if (licenseService) {
           const authorization = await settingsRepo.get<string>('ee:license_authorization');
-          const result = await licenseService.validateAndStore(storedKey, true, authorization ?? undefined);
+          const result = await licenseService.validateAndStore(
+            storedKey,
+            true,
+            authorization ?? undefined
+          );
           if (
             result.valid &&
             (await settingsRepo.get<string>('ee:license_revoked_key')) === storedKey

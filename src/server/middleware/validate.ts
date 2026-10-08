@@ -173,7 +173,7 @@ const projectLegacyWidgetSchema = z
 const projectSettingsSchema = z
   .object({
     defaultAssigneeUserId: z.string().nullable().optional(),
-    language: projectLanguageSchema.optional(),
+    language: projectLanguageSchema.nullable().optional(),
     widgetLauncherButton: widgetLauncherButtonProjectSchema.optional(),
     widgetDialog: widgetDialogColorsSchema.optional(),
     screenshot: projectScreenshotSchema.optional(),

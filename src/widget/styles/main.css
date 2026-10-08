@@ -11,6 +11,28 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
   }
 
   h1,
@@ -127,6 +149,7 @@
 
   /* Dynamic primary colors from App.tsx */
   .bugpin-container {
+    color-scheme: light;
     --primary: var(--button-color, var(--bugpin-primary-700));
     --primary-foreground: var(--button-text-color, #fafafa);
     --primary-hover: var(--button-hover-color, var(--bugpin-primary-800));
@@ -136,6 +159,7 @@
   /* Dark theme variable overrides */
   .bugpin-theme-dark,
   .bugpin-container.bugpin-theme-dark {
+    color-scheme: dark;
     --background: #0a0a0a;
     --foreground: #fafafa;
     --muted: #262626;

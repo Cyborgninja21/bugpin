@@ -8,6 +8,7 @@ import { badgeVariants } from './ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './ui/sidebar';
 import { Separator } from './ui/separator';
+import { ScrollArea } from './ui/scroll-area';
 import { AppSidebar } from './sidebar/AppSidebar';
 import { Footer } from './Footer';
 import { UpdateBanner } from './UpdateBanner';
@@ -176,11 +177,11 @@ export function Layout() {
             </div>
           )}
         </header>
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <ScrollArea className="flex-1" aria-label="Page content">
           <div className="flex flex-col gap-4 p-4 md:p-6">
             <Outlet />
           </div>
-        </div>
+        </ScrollArea>
         <Footer />
       </SidebarInset>
     </SidebarProvider>

@@ -7,9 +7,11 @@ import {
 import { usersRepo } from '../../src/server/database/repositories/users.repo';
 import { projectsRepo } from '../../src/server/database/repositories/projects.repo';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 import { emailService } from '../../src/server/services/email.service';
 import { logger } from '../../src/server/utils/logger';
 import type {
+  NotificationDefaultSettings,
   NotificationPreferences,
   ProjectNotificationDefaults,
   Project,
@@ -89,12 +91,23 @@ const baseReport: Report = {
   updatedAt: new Date().toISOString(),
 };
 
+const globalNotifications: NotificationDefaultSettings = {
+  emailEnabled: true,
+  notifyOnNewReport: true,
+  notifyOnStatusChange: true,
+  notifyOnPriorityChange: true,
+  notifyOnAssignment: true,
+  notifyOnDeletion: true,
+};
+
 let projectById: Project | null = baseProject;
 let preferencesByProject: NotificationPreferences[] = [basePreferences];
 let userById: User | null = baseUser;
 let preferencesByUser: NotificationPreferences[] = [basePreferences];
 let preferencesByUserProject: NotificationPreferences | null = basePreferences;
 let defaultsByProject: ProjectNotificationDefaults | null = baseDefaults;
+let notificationSettings: NotificationDefaultSettings = globalNotifications;
+let lastGlobalDefaults: unknown = null;
 
 const sendNewReportNotification = mock(async () => ({ success: true }));
 const sendStatusChangeNotification = mock(async () => ({ success: true }));
@@ -110,11 +123,19 @@ beforeEach(() => {
   preferencesByUser = [basePreferences];
   preferencesByUserProject = basePreferences;
   defaultsByProject = baseDefaults;
+  notificationSettings = globalNotifications;
+  lastGlobalDefaults = null;
 
   notificationPreferencesRepo.getOrCreate = async () => basePreferences;
   notificationPreferencesRepo.upsert = async () => basePreferences;
   notificationPreferencesRepo.findByUser = async () => preferencesByUser;
-  notificationPreferencesRepo.findByProjectWithEmailEnabled = async () => preferencesByProject;
+  notificationPreferencesRepo.findByProjectWithEmailEnabled = async (
+    _projectId,
+    globalDefaults
+  ) => {
+    lastGlobalDefaults = globalDefaults;
+    return preferencesByProject;
+  };
   notificationPreferencesRepo.findByUserAndProject = async () => preferencesByUserProject;
 
   projectNotificationDefaultsRepo.findByProject = async () => defaultsByProject;
@@ -124,7 +145,9 @@ beforeEach(() => {
   usersRepo.findById = async () => userById;
   projectsRepo.findById = async () => projectById;
 
-  settingsRepo.getAll = async () => ({ appUrl: 'https://app.example.com' }) as never;
+  settingsRepo.getAll = async () =>
+    ({ appUrl: 'https://app.example.com', notifications: notificationSettings }) as never;
+  settingsCacheService.invalidate();
 
   emailService.sendNewReportNotification = sendNewReportNotification;
   emailService.sendStatusChangeNotification = sendStatusChangeNotification;
@@ -152,6 +175,7 @@ afterEach(() => {
   Object.assign(settingsRepo, originalSettingsRepo);
   Object.assign(emailService, originalEmailService);
   Object.assign(logger, originalLogger);
+  settingsCacheService.invalidate();
 });
 
 describe('notificationsService preferences', () => {
@@ -228,5 +252,33 @@ describe('notificationsService notifications', () => {
     preferencesByProject = [{ ...basePreferences, notifyOnDeletion: false }];
     await notificationsService.notifyReportDeleted(baseReport);
     expect(sendReportDeletedNotification).not.toHaveBeenCalled();
+  });
+
+  it('passes global notification defaults to the recipient query', async () => {
+    notificationSettings = { ...globalNotifications, notifyOnStatusChange: false };
+    await notificationsService.notifyStatusChange(baseReport, 'open', 'resolved');
+    expect(lastGlobalDefaults).toEqual(notificationSettings);
+  });
+
+  it('skips assignment notifications when project defaults disable them and no user row exists', async () => {
+    preferencesByUserProject = null;
+    defaultsByProject = { ...baseDefaults, defaultNotifyOnAssignment: false };
+    await notificationsService.notifyAssignment(baseReport, 'usr_1');
+    expect(sendAssignmentNotification).not.toHaveBeenCalled();
+  });
+
+  it('skips assignment notifications when global defaults disable them and no project defaults exist', async () => {
+    preferencesByUserProject = null;
+    defaultsByProject = null;
+    notificationSettings = { ...globalNotifications, notifyOnAssignment: false };
+    await notificationsService.notifyAssignment(baseReport, 'usr_1');
+    expect(sendAssignmentNotification).not.toHaveBeenCalled();
+  });
+
+  it('sends assignment notifications from global defaults when nothing overrides them', async () => {
+    preferencesByUserProject = null;
+    defaultsByProject = null;
+    await notificationsService.notifyAssignment(baseReport, 'usr_1');
+    expect(sendAssignmentNotification).toHaveBeenCalled();
   });
 });

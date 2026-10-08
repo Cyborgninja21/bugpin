@@ -540,6 +540,34 @@ describe('widget routes', () => {
         expect(res.status).toBe(201);
         expect(capturedLocale).toBe('en');
       });
+
+      it('uses the global language when the project has no override', async () => {
+        projectResult = { ...baseProject, settings: {} };
+        settingsRepo.getAll = async () =>
+          ({
+            ...baseSettings,
+            language: { mode: 'manual', defaultLanguage: 'de' },
+          }) as AppSettings;
+
+        let capturedLocale: string | undefined;
+        reportsService.create = async (input) => {
+          capturedLocale = input.reporterLocale;
+          return Result.ok(baseReport);
+        };
+
+        const app = createApp();
+        const res = await app.request('http://localhost/widget/submit', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': 'test_api_key_123',
+          },
+          body: JSON.stringify({ ...validSubmitBody, locale: 'fr' }),
+        });
+
+        expect(res.status).toBe(201);
+        expect(capturedLocale).toBe('de');
+      });
     });
   });
 
@@ -721,18 +749,36 @@ describe('widget routes', () => {
       expect(body.config.position).toBe('bottom-right');
     });
 
-    it('exposes default language block when project has none', async () => {
-      projectResult = {
-        ...baseProject,
-        settings: {},
-      };
+    it('exposes the global language block when project has no override', async () => {
+      projectResult = { ...baseProject, settings: {} };
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          language: { mode: 'manual', defaultLanguage: 'de' },
+        }) as AppSettings;
 
       const app = createApp();
       const res = await app.request('http://localhost/widget/config/test_api_key_123');
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.config.language).toEqual({ mode: 'auto', defaultLanguage: 'en' });
+      expect(body.config.language).toEqual({ mode: 'manual', defaultLanguage: 'de' });
+    });
+
+    it('treats a cleared (null) project language as no override', async () => {
+      projectResult = { ...baseProject, settings: { language: null } };
+      settingsRepo.getAll = async () =>
+        ({
+          ...baseSettings,
+          language: { mode: 'auto', defaultLanguage: 'fr' },
+        }) as AppSettings;
+
+      const app = createApp();
+      const res = await app.request('http://localhost/widget/config/test_api_key_123');
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.config.language).toEqual({ mode: 'auto', defaultLanguage: 'fr' });
     });
 
     it('exposes configured language block when project has one', async () => {

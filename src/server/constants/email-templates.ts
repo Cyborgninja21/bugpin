@@ -56,13 +56,16 @@ export function appendFooterToHtml(
     if (whiteLabel.hideEmailBranding)
       footer =
         templateType === 'invitation'
-          ? `<div class="footer"><a href="{{invite.url}}">{{invite.url}}</a>${copyright}</div>`
+          ? `<div class="footer"><a href="{{invite.url}}">{{invite.url}}</a>${copyright ? `<p style="margin: 15px 0 0 0;">${copyright}</p>` : ''}</div>`
           : copyright
             ? `<div class="footer">${copyright}</div>`
             : '';
-    else if (copyright) footer = footer.replace(/&copy;.*?<\/p>/, `${copyright}</p>`);
+    else if (copyright) footer = footer.replace(/&copy;.*?<\/p>/, () => `${copyright}</p>`);
   }
-  return html.replace(/(\s*<\/div>\s*<\/body>\s*<\/html>\s*)$/i, `${footer}$1`);
+  return html.replace(
+    /(\s*<\/div>\s*<\/body>\s*<\/html>\s*)$/i,
+    (closingTags) => `${footer}${closingTags}`
+  );
 }
 
 export function getSampleDataForTemplate(

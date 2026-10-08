@@ -6,6 +6,7 @@ import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
+import { ScrollArea } from '../ui/scroll-area';
 import { VariableNode } from './tiptap-extensions/variable-node';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -382,7 +383,7 @@ export function TemplateEditor({
                 <p className="text-xs text-muted-foreground px-2 py-1">
                   Click to insert a variable
                 </p>
-                <div className="max-h-48 overflow-y-auto">
+                <ScrollArea className="max-h-48">
                   {availableVariables.map((variable) => (
                     <button
                       key={variable}
@@ -392,7 +393,7 @@ export function TemplateEditor({
                       {`{{${variable}}}`}
                     </button>
                   ))}
-                </div>
+                </ScrollArea>
               </div>
             </PopoverContent>
           </Popover>

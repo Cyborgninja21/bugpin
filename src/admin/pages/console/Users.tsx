@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { ScrollArea } from '../../components/ui/scroll-area';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../../components/ui/card';
@@ -261,7 +262,7 @@ export function Users() {
                             </p>
                           ) : null}
                         </div>
-                        <div className="max-h-72 overflow-y-auto p-2">
+                        <ScrollArea className="max-h-72" contentClassName="p-2">
                           {isLoadingProjects ? (
                             <div className="py-4 text-center">
                               <Spinner className="mx-auto text-primary" />
@@ -304,7 +305,7 @@ export function Users() {
                               );
                             })
                           )}
-                        </div>
+                        </ScrollArea>
                       </PopoverContent>
                     </Popover>
                   </TableCell>

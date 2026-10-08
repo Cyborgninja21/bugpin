@@ -181,9 +181,8 @@ async function shouldUseS3(): Promise<boolean> {
       return false;
     }
 
-    const storageProvider = getEEHooks().getStorageProvider();
-    if (!storageProvider) {
-      logger.warn('S3 enabled in settings but EE storage provider not available');
+    if (!getEEHooks().getStorageProvider()?.acceptsUploads()) {
+      logger.warn('S3 enabled in settings but S3 storage is not licensed');
       return false;
     }
 

@@ -108,9 +108,12 @@ export function getEEPlugin(): EEPlugin | null {
 
 /**
  * Initialize EE plugin
- * Called once at server startup
+ * Called once at server startup. Short-lived processes that run next to the
+ * server pass refresh: false and rely on the authorization the server stored,
+ * because the license server reads a second refreshing process as a second
+ * running copy of the license.
  */
-export async function initializeEE(): Promise<void> {
+export async function initializeEE(options: { refresh?: boolean } = {}): Promise<void> {
   if (eeInitialized) return;
 
   const plugin = getEEPlugin();
@@ -151,9 +154,9 @@ export async function initializeEE(): Promise<void> {
           if (result.valid) {
             logger.info('License restored from database');
           } else {
-            logger.warn('Stored license key is no longer valid', { error: result.error });
-            if (!licenseService.validate(storedKey, true).valid)
-              await settingsRepo.delete('ee:license_key');
+            // The key stays stored: a clock that is behind at boot fails validation
+            // too, and the periodic refresh loads the license once it validates.
+            logger.warn('Stored license key could not be loaded', { error: result.error });
           }
         }
       }
@@ -162,8 +165,10 @@ export async function initializeEE(): Promise<void> {
     logger.warn('Failed to restore license from database', { error });
   }
 
-  const ee = require(resolveEEPath()!);
-  ee.startLicenseRefresh?.();
+  if (options.refresh !== false) {
+    const ee = require(resolveEEPath()!);
+    ee.startLicenseRefresh?.();
+  }
 
   registerEEHooks(plugin.getHooks());
   logger.info('Enterprise Edition initialized', {
@@ -238,11 +243,13 @@ export function getLicenseStatus() {
   }
 
   const valid = licenseService.isValid();
+  const warning = licenseService.getStatus().warning;
   return {
     eeAvailable: true,
     installed: true,
     licensed: valid,
     ...(!valid ? { message: licenseService.getStatus().error ?? 'License inactive' } : {}),
+    ...(warning ? { warning } : {}),
     ...getEEProjectLicenseService()?.getStatus(),
     plan: license.plan,
     customerName: license.customerName,

@@ -36,6 +36,7 @@ export function License() {
   const [licenseKey, setLicenseKey] = useState('');
   const [removeConfirmation, setRemoveConfirmation] = useState('');
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [activationStatusPending, setActivationStatusPending] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [activationSelection, setActivationSelection] = useState<{
     projectLimit: number;
@@ -44,18 +45,18 @@ export function License() {
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
   const invalidateLicense = () => {
-    for (const key of [
-      'license-status',
-      'license-features',
-      'branding-config',
-      'projects',
-      'project',
-      'reports',
-      'report',
-      'license-projects',
-    ]) {
-      queryClient.invalidateQueries({ queryKey: [key] });
-    }
+    return Promise.all(
+      [
+        'license-status',
+        'license-features',
+        'branding-config',
+        'projects',
+        'project',
+        'reports',
+        'report',
+        'license-projects',
+      ].map((key) => queryClient.invalidateQueries({ queryKey: [key] }))
+    );
   };
 
   const {
@@ -75,14 +76,19 @@ export function License() {
         accepted: true,
         version: ENTERPRISE_AGREEMENT_VERSION,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
+      setActivationStatusPending(true);
       toast.success('License activated successfully');
       setAgreementOpen(false);
       setAgreementAccepted(false);
       setLicenseKey('');
       setActivationSelection(null);
       setSelectedIds(null);
-      invalidateLicense();
+      try {
+        await invalidateLicense();
+      } finally {
+        setActivationStatusPending(false);
+      }
     },
     onError: (
       err: Error & {
@@ -102,7 +108,6 @@ export function License() {
         typeof details.projectLimit === 'number' &&
         details.projects
       ) {
-        setAgreementOpen(false);
         setActivationSelection({ projectLimit: details.projectLimit, projects: details.projects });
         setSelectedIds([]);
         return;
@@ -176,12 +181,8 @@ export function License() {
       toast.error('Please enter a license key');
       return;
     }
-    if (activationSelection && agreementAccepted) {
-      confirmActivation();
-    } else {
-      setAgreementAccepted(false);
-      setAgreementOpen(true);
-    }
+    setAgreementAccepted(false);
+    setAgreementOpen(true);
   };
 
   const confirmActivation = () => {
@@ -212,7 +213,7 @@ export function License() {
     );
   }
 
-  if (isLoading || (isFetching && !status?.licensed && !status?.installed)) {
+  if (isLoading || activationStatusPending) {
     return (
       <Card className="max-w-4xl">
         <CardContent className="py-12">
@@ -260,9 +261,16 @@ export function License() {
                     ? 'Licensed'
                     : status?.message === 'License inactive'
                       ? 'Inactive'
-                      : 'Expired'}
+                      : status?.message === 'License has expired'
+                        ? 'Expired'
+                        : 'Verification required'}
                 </Badge>
               </div>
+              {isLicensed && status?.warning && (
+                <p role="alert" className="text-sm text-orange-500">
+                  {status.warning}
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -449,20 +457,6 @@ export function License() {
             </div>
           ) : (
             <form onSubmit={handleActivate} className="space-y-4">
-              {activationSelection && (
-                <div className="space-y-3">
-                  <p className="font-medium">
-                    Choose up to {activationSelection.projectLimit} projects to keep available
-                  </p>
-                  <ProjectSelection
-                    projects={activationSelection.projects}
-                    limit={activationSelection.projectLimit}
-                    selectedIds={selectedIds ?? []}
-                    onChange={setSelectedIds}
-                    disabled={activateMutation.isPending}
-                  />
-                </div>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="license-key">License Key</Label>
                 <Textarea
@@ -507,14 +501,56 @@ export function License() {
           if (!open) setAgreementAccepted(false);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
-            <AlertDialogDescription>
-              Review the Enterprise License Agreement before activating this license. If you act for
-              another person or an organization, you must be authorized to accept on their behalf.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Review the Enterprise License Agreement before activating this license. If you act
+                  for another person or an organization, you must be authorized to accept on their
+                  behalf.
+                </p>
+                <p>
+                  <strong className="font-medium text-foreground">
+                    Activating binds this license to this installation.
+                  </strong>{' '}
+                  This key cannot be used on another installation. To move your license, you must
+                  replace (rotate) the key first.
+                </p>
+                <p>
+                  Sign in to the{' '}
+                  <a
+                    href="https://bugpin.io/portal/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    customer portal
+                  </a>
+                  , find your license, and choose{' '}
+                  <strong>Replace license for another server</strong>. Type <strong>replace</strong>{' '}
+                  to confirm, then copy or download the new key and activate it on the new
+                  installation. The old key is revoked. Replacement is available once every 24
+                  hours.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {activationSelection && (
+            <div className="space-y-3">
+              <p className="font-medium">
+                Choose up to {activationSelection.projectLimit} projects to keep available
+              </p>
+              <ProjectSelection
+                projects={activationSelection.projects}
+                limit={activationSelection.projectLimit}
+                selectedIds={selectedIds ?? []}
+                onChange={setSelectedIds}
+                disabled={activateMutation.isPending}
+              />
+            </div>
+          )}
           <div className="flex items-center gap-3 py-2">
             <Checkbox
               id="enterprise-license-agreement"

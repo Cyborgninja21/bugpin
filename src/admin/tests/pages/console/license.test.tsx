@@ -128,18 +128,73 @@ it('shows a synced inactive license with its details and allows sync to restore 
   expect(sync).toHaveBeenCalledTimes(2);
 });
 
-it.each(['License has expired', 'License inactive', 'License verification required'])(
-  'allows syncing an installed license when the status message is %s',
-  async (message) => {
-    const status = { eeAvailable: true, licensed: false, installed: true, message };
-    vi.spyOn(licenseApi, 'getStatus').mockResolvedValue(status);
-    const sync = vi.spyOn(licenseApi, 'sync').mockResolvedValue(status);
-    const user = userEvent.setup();
-    renderWithQuery(<License />);
-    await user.click(await screen.findByRole('button', { name: 'Sync license' }));
-    await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
-  }
-);
+it.each([
+  ['License has expired', 'Expired'],
+  ['License inactive', 'Inactive'],
+  ['License verification required', 'Verification required'],
+  [
+    'License verification required. Make sure your BugPin server is connected to the internet. Verification will retry automatically.',
+    'Verification required',
+  ],
+])('shows the correct badge and allows syncing when the status is %s', async (message, badge) => {
+  const status = { eeAvailable: true, licensed: false, installed: true, message };
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue(status);
+  const sync = vi.spyOn(licenseApi, 'sync').mockResolvedValue(status);
+  const user = userEvent.setup();
+  renderWithQuery(<License />);
+  expect(await screen.findByText(badge, { exact: true })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Sync license' }));
+  await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+});
+
+it('warns on an active license that is also running on another server', async () => {
+  const warning =
+    'This license is also running on another server. Stop the other copy within 24 hours, or enterprise features turn off on both servers.';
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
+    eeAvailable: true,
+    installed: true,
+    licensed: true,
+    warning,
+  });
+  renderWithQuery(<License />);
+  expect(await screen.findByText('Licensed')).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent(warning);
+});
+
+it('preserves the activation form and open agreement dialog during a background status refetch', async () => {
+  const unlicensed = { eeAvailable: true, licensed: false, installed: false };
+  let finishRefetch!: (status: LicenseStatus) => void;
+  const status = vi
+    .spyOn(licenseApi, 'getStatus')
+    .mockResolvedValueOnce(unlicensed)
+    .mockImplementation(
+      () =>
+        new Promise<LicenseStatus>((resolve) => {
+          finishRefetch = resolve;
+        })
+    );
+  const user = userEvent.setup();
+  const { queryClient } = renderWithQuery(<License />);
+  const input = await screen.findByRole('textbox', { name: 'License Key' });
+  await user.type(input, 'test-license');
+  await user.click(screen.getByRole('button', { name: 'Activate License' }));
+  const dialog = screen.getByRole('alertdialog');
+  const checkbox = screen.getByRole('checkbox', {
+    name: 'I accept the BugPin Enterprise License Agreement.',
+  });
+  await user.click(checkbox);
+  await act(async () => {
+    void queryClient.refetchQueries({ queryKey: ['license-status'] });
+  });
+  await waitFor(() => expect(status).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole('alertdialog')).toBe(dialog);
+  expect(checkbox).toBeChecked();
+  expect(input).toBeInTheDocument();
+  expect(input).toHaveValue('test-license');
+  await act(async () => finishRefetch(unlicensed));
+  expect(screen.getByRole('alertdialog')).toBe(dialog);
+  expect(checkbox).toBeChecked();
+});
 
 it('does not offer installed-license sync when no license is installed', async () => {
   vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
@@ -209,7 +264,7 @@ it('requires exact confirmation for removal, resets on dismissal, and prevents r
   );
 });
 
-it('asks for project selection before activating an over-capacity license', async () => {
+it('keeps project selection and agreement acceptance in the dialog through an activation retry', async () => {
   const projects = [
     { id: 'proj_one', name: 'Project One' },
     { id: 'proj_two', name: 'Project Two' },
@@ -229,6 +284,9 @@ it('asks for project selection before activating an over-capacity license', asyn
     .mockRejectedValueOnce({
       response: { data: { error: 'PROJECT_SELECTION_REQUIRED', projectLimit: 1, projects } },
     })
+    .mockRejectedValueOnce({
+      response: { data: { message: 'Could not record agreement acceptance. Please try again.' } },
+    })
     .mockImplementationOnce(async () => {
       licensed = true;
     });
@@ -242,14 +300,28 @@ it('asks for project selection before activating an over-capacity license', asyn
   await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   await user.click(await screen.findByRole('checkbox', { name: 'Project One' }));
   expect(screen.getByRole('checkbox', { name: 'Project Two' })).toBeDisabled();
-  await user.click(screen.getByRole('button', { name: 'Activate License' }));
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  expect(
+    screen.getByRole('checkbox', { name: 'I accept the BugPin Enterprise License Agreement.' })
+  ).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   await waitFor(() =>
     expect(activate).toHaveBeenLastCalledWith('test-license', ['proj_one'], {
       accepted: true,
       version: ENTERPRISE_AGREEMENT_VERSION,
     })
   );
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Agree & Activate' })).toBeEnabled()
+  );
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'Project One' })).toBeChecked();
+  expect(
+    screen.getByRole('checkbox', { name: 'I accept the BugPin Enterprise License Agreement.' })
+  ).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Agree & Activate' }));
   expect(await screen.findByText('1 of 1 projects used')).toBeInTheDocument();
+  expect(activate).toHaveBeenCalledTimes(3);
 });
 
 it('syncs an increased allowance without reactivation and lets the admin allocate the new slot', async () => {

@@ -24,6 +24,10 @@ const ScrollArea = React.forwardRef<
       const overflows =
         viewport.scrollHeight > viewport.clientHeight ||
         viewport.scrollWidth > viewport.clientWidth;
+      if (!overflows) {
+        setFocusable(false);
+        return;
+      }
       const hasFocusableChildren = Array.from(
         content.querySelectorAll<HTMLElement>(
           'a[href], button, input, select, textarea, [tabindex], [contenteditable]'
@@ -35,18 +39,41 @@ const ScrollArea = React.forwardRef<
             (element.isContentEditable && !element.hasAttribute('tabindex'))) &&
           element.getClientRects().length > 0
       );
-      setFocusable(overflows && !hasFocusableChildren);
+      setFocusable(!hasFocusableChildren);
+    };
+
+    let frame: number | undefined;
+    const scheduleUpdate = () => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        updateFocusable();
+      });
     };
 
     updateFocusable();
-    const resizeObserver = new ResizeObserver(updateFocusable);
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
     resizeObserver.observe(viewport);
     resizeObserver.observe(content);
-    const mutationObserver = new MutationObserver(updateFocusable);
-    mutationObserver.observe(content, { childList: true, subtree: true, attributes: true });
+    const mutationObserver = new MutationObserver(scheduleUpdate);
+    mutationObserver.observe(content, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        'disabled',
+        'tabindex',
+        'hidden',
+        'href',
+        'contenteditable',
+        'type',
+        'open',
+      ],
+    });
     return () => {
       resizeObserver.disconnect();
       mutationObserver.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
     };
   }, []);
 

@@ -90,7 +90,7 @@ it('keeps overflowing read-only content keyboard accessible and updates when con
     }
   };
   act(resize);
-  expect(viewport.tabIndex).toBe(0);
+  await waitFor(() => expect(viewport.tabIndex).toBe(0));
   expect(viewport).toHaveAccessibleName('Scrollable content');
 
   rerender(
@@ -108,5 +108,69 @@ it('keeps overflowing read-only content keyboard accessible and updates when con
   await waitFor(() => expect(viewport.tabIndex).toBe(0));
   Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 100 });
   act(resize);
+  await waitFor(() => expect(viewport.tabIndex).toBe(-1));
+});
+
+it('filters unrelated mutations, batches focus checks, and cancels pending work on unmount', async () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.set(++nextFrame, callback);
+    return nextFrame;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+  const flushFrames = () => {
+    const pending = [...frames.values()];
+    frames.clear();
+    act(() => pending.forEach((callback) => callback(0)));
+  };
+  const { container, unmount } = render(
+    <ScrollArea>
+      <button disabled>Action</button>
+    </ScrollArea>
+  );
+  const viewport = container.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]')!;
+  const content = viewport.firstElementChild!;
+  const scan = vi.spyOn(content, 'querySelectorAll');
+  const button = screen.getByRole('button', { name: 'Action' });
+  const rect = new DOMRect(0, 0, 100, 20);
+  vi.spyOn(button, 'getClientRects').mockReturnValue(Object.assign([rect], { item: () => rect }));
+  Object.defineProperties(viewport, {
+    clientHeight: { configurable: true, value: 100 },
+    scrollHeight: { configurable: true, value: 400 },
+  });
+  await act(async () => {
+    button.setAttribute('class', 'active');
+    button.setAttribute('style', 'color: red');
+    button.setAttribute('aria-expanded', 'true');
+  });
+  flushFrames();
+  expect(scan).not.toHaveBeenCalled();
+
+  await act(async () => button.removeAttribute('disabled'));
+  await act(async () => button.setAttribute('tabindex', '0'));
+  expect(scan).not.toHaveBeenCalled();
+  flushFrames();
+  expect(scan).toHaveBeenCalledTimes(1);
   expect(viewport.tabIndex).toBe(-1);
+
+  await act(async () => button.setAttribute('disabled', ''));
+  flushFrames();
+  expect(viewport.tabIndex).toBe(0);
+  scan.mockClear();
+
+  Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 100 });
+  act(() => {
+    for (const observer of observers) {
+      if (observer.targets.has(viewport)) observer.callback([], observer);
+    }
+  });
+  flushFrames();
+  expect(scan).not.toHaveBeenCalled();
+  expect(viewport.tabIndex).toBe(-1);
+
+  await act(async () => button.removeAttribute('disabled'));
+  expect(frames.size).toBeGreaterThan(0);
+  unmount();
+  expect(frames.size).toBe(0);
 });

@@ -36,6 +36,7 @@ export function License() {
   const [licenseKey, setLicenseKey] = useState('');
   const [removeConfirmation, setRemoveConfirmation] = useState('');
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [activationStatusPending, setActivationStatusPending] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [activationSelection, setActivationSelection] = useState<{
     projectLimit: number;
@@ -44,18 +45,18 @@ export function License() {
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
   const invalidateLicense = () => {
-    for (const key of [
-      'license-status',
-      'license-features',
-      'branding-config',
-      'projects',
-      'project',
-      'reports',
-      'report',
-      'license-projects',
-    ]) {
-      queryClient.invalidateQueries({ queryKey: [key] });
-    }
+    return Promise.all(
+      [
+        'license-status',
+        'license-features',
+        'branding-config',
+        'projects',
+        'project',
+        'reports',
+        'report',
+        'license-projects',
+      ].map((key) => queryClient.invalidateQueries({ queryKey: [key] }))
+    );
   };
 
   const {
@@ -75,14 +76,19 @@ export function License() {
         accepted: true,
         version: ENTERPRISE_AGREEMENT_VERSION,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
+      setActivationStatusPending(true);
       toast.success('License activated successfully');
       setAgreementOpen(false);
       setAgreementAccepted(false);
       setLicenseKey('');
       setActivationSelection(null);
       setSelectedIds(null);
-      invalidateLicense();
+      try {
+        await invalidateLicense();
+      } finally {
+        setActivationStatusPending(false);
+      }
     },
     onError: (
       err: Error & {
@@ -207,7 +213,7 @@ export function License() {
     );
   }
 
-  if (isLoading || (isFetching && !status?.licensed && !status?.installed)) {
+  if (isLoading || activationStatusPending) {
     return (
       <Card className="max-w-4xl">
         <CardContent className="py-12">
@@ -255,7 +261,9 @@ export function License() {
                     ? 'Licensed'
                     : status?.message === 'License inactive'
                       ? 'Inactive'
-                      : 'Expired'}
+                      : status?.message === 'License has expired'
+                        ? 'Expired'
+                        : 'Verification required'}
                 </Badge>
               </div>
               {isLicensed && status?.warning && (
@@ -493,7 +501,7 @@ export function License() {
           if (!open) setAgreementAccepted(false);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
             <AlertDialogDescription asChild>

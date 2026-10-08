@@ -141,6 +141,20 @@ it.each(['License has expired', 'License inactive', 'License verification requir
   }
 );
 
+it('warns on an active license that is also running on another server', async () => {
+  const warning =
+    'This license is also running on another server. Stop the other copy within 24 hours, or enterprise features turn off on both servers.';
+  vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
+    eeAvailable: true,
+    installed: true,
+    licensed: true,
+    warning,
+  });
+  renderWithQuery(<License />);
+  expect(await screen.findByText('Licensed')).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent(warning);
+});
+
 it('does not offer installed-license sync when no license is installed', async () => {
   vi.spyOn(licenseApi, 'getStatus').mockResolvedValue({
     eeAvailable: true,

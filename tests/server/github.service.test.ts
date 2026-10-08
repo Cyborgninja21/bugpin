@@ -42,6 +42,7 @@ beforeEach(() => {
   registerEEHooks({
     ...originalHooks,
     getStorageProvider: () => ({
+      acceptsUploads: () => true,
       read: async () => Result.ok(new Uint8Array([1, 2, 3])),
       upload: async () => Result.fail('unused'),
       delete: async () => Result.ok(undefined),

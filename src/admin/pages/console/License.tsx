@@ -258,6 +258,11 @@ export function License() {
                       : 'Expired'}
                 </Badge>
               </div>
+              {isLicensed && status?.warning && (
+                <p role="alert" className="text-sm text-orange-500">
+                  {status.warning}
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>

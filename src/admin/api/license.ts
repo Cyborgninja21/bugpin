@@ -5,6 +5,7 @@ export interface LicenseStatus {
   licensed: boolean;
   installed?: boolean;
   message?: string;
+  warning?: string;
   plan?: string;
   customerName?: string;
   customerEmail?: string;

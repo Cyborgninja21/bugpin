@@ -8,6 +8,8 @@ import type { EnterpriseLicenseAcceptance } from '@shared/enterprise-license';
  * Storage provider interface for S3 or other storage backends
  */
 export interface StorageProvider {
+  // False while the provider only serves reads and deletes of existing objects
+  acceptsUploads(): boolean;
   read(path: string): Promise<Result<Uint8Array>>;
   upload(options: StorageUploadOptions): Promise<Result<StorageUploadResult>>;
   delete(key: string): Promise<Result<void>>;
@@ -142,7 +144,7 @@ export interface ProjectLicenseService {
     key: string,
     projectIds: unknown,
     acceptance: EnterpriseLicenseAcceptance
-  ): Promise<Result<unknown>>;
+  ): Promise<Result<unknown> & { projectLimit?: number }>;
   selectProjects(projectIds: unknown): Result<ProjectLicenseStatus>;
 }
 
@@ -183,8 +185,7 @@ export type EEFeature =
   | 'white-label'
   | 'custom-templates'
   | 's3-storage'
-  | 'advanced-roles'
-  | 'priority-support';
+  | 'advanced-roles';
 
 /**
  * EE Plugin interface

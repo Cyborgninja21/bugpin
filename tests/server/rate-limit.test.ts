@@ -9,6 +9,7 @@ import {
   userKeyGenerator,
 } from '../../src/server/middleware/rate-limit';
 import { settingsRepo } from '../../src/server/database/repositories/settings.repo';
+import { settingsCacheService } from '../../src/server/services/settings-cache.service';
 
 type TestContext = {
   req: {
@@ -35,7 +36,7 @@ function createContext({
 } = {}): TestContext {
   const headerStore = new Map<string, string>();
   const headerLookup = new Map(
-    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])
   );
 
   return {
@@ -64,10 +65,12 @@ const originalSettingsRepo = { ...settingsRepo };
 
 beforeEach(() => {
   clearAllRateLimits();
+  settingsCacheService.invalidate();
 });
 
 afterEach(() => {
   Object.assign(settingsRepo, originalSettingsRepo);
+  settingsCacheService.invalidate();
 });
 
 describe('rateLimiter', () => {

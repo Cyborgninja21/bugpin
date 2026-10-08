@@ -5,6 +5,7 @@ export interface LicenseStatus {
   licensed: boolean;
   installed?: boolean;
   message?: string;
+  warning?: string;
   plan?: string;
   customerName?: string;
   customerEmail?: string;
@@ -59,7 +60,7 @@ export const licenseApi = {
   },
 
   /**
-   * Remove the current license
+   * Sync the installed license with the license server
    */
   async sync(): Promise<LicenseStatus> {
     const response = await axios.post<LicenseStatus>('/api/license/sync');

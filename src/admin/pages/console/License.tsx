@@ -36,6 +36,7 @@ export function License() {
   const [licenseKey, setLicenseKey] = useState('');
   const [removeConfirmation, setRemoveConfirmation] = useState('');
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [activationStatusPending, setActivationStatusPending] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [activationSelection, setActivationSelection] = useState<{
     projectLimit: number;
@@ -44,21 +45,27 @@ export function License() {
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
   const invalidateLicense = () => {
-    for (const key of [
-      'license-status',
-      'license-features',
-      'branding-config',
-      'projects',
-      'project',
-      'reports',
-      'report',
-      'license-projects',
-    ]) {
-      queryClient.invalidateQueries({ queryKey: [key] });
-    }
+    return Promise.all(
+      [
+        'license-status',
+        'license-features',
+        'branding-config',
+        'projects',
+        'project',
+        'reports',
+        'report',
+        'license-projects',
+      ].map((key) => queryClient.invalidateQueries({ queryKey: [key] }))
+    );
   };
 
-  const { data: status, isLoading } = useQuery({
+  const {
+    data: status,
+    isLoading,
+    isFetching,
+    isError: statusError,
+    refetch: refetchStatus,
+  } = useQuery({
     queryKey: ['license-status'],
     queryFn: licenseApi.getStatus,
   });
@@ -69,17 +76,19 @@ export function License() {
         accepted: true,
         version: ENTERPRISE_AGREEMENT_VERSION,
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['license-status'] });
-      queryClient.invalidateQueries({ queryKey: ['license-features'] });
-      queryClient.invalidateQueries({ queryKey: ['branding-config'] });
+    onSuccess: async () => {
+      setActivationStatusPending(true);
       toast.success('License activated successfully');
       setAgreementOpen(false);
       setAgreementAccepted(false);
       setLicenseKey('');
       setActivationSelection(null);
       setSelectedIds(null);
-      invalidateLicense();
+      try {
+        await invalidateLicense();
+      } finally {
+        setActivationStatusPending(false);
+      }
     },
     onError: (
       err: Error & {
@@ -99,7 +108,6 @@ export function License() {
         typeof details.projectLimit === 'number' &&
         details.projects
       ) {
-        setAgreementOpen(false);
         setActivationSelection({ projectLimit: details.projectLimit, projects: details.projects });
         setSelectedIds([]);
         return;
@@ -138,10 +146,14 @@ export function License() {
 
   const syncMutation = useMutation({
     mutationFn: licenseApi.sync,
-    onSuccess: () => {
+    onSuccess: (synced) => {
       invalidateLicense();
       setSelectedIds(null);
-      toast.success('License synced');
+      if (synced.message === 'License inactive') {
+        toast.info('License is inactive. Enterprise features are disabled.');
+      } else {
+        toast.success('License synced');
+      }
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       toast.error(
@@ -169,12 +181,8 @@ export function License() {
       toast.error('Please enter a license key');
       return;
     }
-    if (activationSelection && agreementAccepted) {
-      confirmActivation();
-    } else {
-      setAgreementAccepted(false);
-      setAgreementOpen(true);
-    }
+    setAgreementAccepted(false);
+    setAgreementOpen(true);
   };
 
   const confirmActivation = () => {
@@ -185,7 +193,27 @@ export function License() {
     });
   };
 
-  if (isLoading) {
+  if (statusError && !status) {
+    return (
+      <Card className="max-w-4xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5" />
+            License Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p role="alert">Could not load license status. Retry to see your installed license.</p>
+          <Button variant="outline" onClick={() => void refetchStatus()} disabled={isFetching}>
+            {isFetching && <Spinner size="sm" />}
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading || activationStatusPending) {
     return (
       <Card className="max-w-4xl">
         <CardContent className="py-12">
@@ -195,6 +223,8 @@ export function License() {
     );
   }
 
+  const statusMessage = status?.message?.trim() || 'License inactive';
+  const statusDescription = `${statusMessage}${/[.!?]$/.test(statusMessage) ? '' : '.'} Enterprise features are disabled.`;
   const isLicensed = status?.licensed ?? false;
   const expiresDate = status?.expiresAt ? new Date(status.expiresAt) : null;
   const neverExpires = expiresDate ? expiresDate.getFullYear() >= 9999 : false;
@@ -205,6 +235,15 @@ export function License() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {statusError && (
+        <div className="space-y-2">
+          <p role="alert">Could not refresh license status. Showing the last loaded status.</p>
+          <Button variant="outline" onClick={() => void refetchStatus()} disabled={isFetching}>
+            {isFetching && <Spinner size="sm" />}
+            Retry
+          </Button>
+        </div>
+      )}
       {/* Current License Status */}
       <Card>
         <CardHeader>
@@ -215,18 +254,34 @@ export function License() {
           <CardDescription>
             {isLicensed
               ? 'Your Enterprise license is active'
-              : 'Enter your license key to unlock Enterprise features'}
+              : status?.installed
+                ? statusDescription
+                : 'Enter your license key to unlock Enterprise features'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLicensed ? (
+          {isLicensed || status?.installed ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Badge variant="default" className="bg-green-600">
-                  <Check className="h-3 w-3 mr-1" />
-                  Licensed
+                <Badge
+                  variant={isLicensed ? 'default' : 'secondary'}
+                  className={isLicensed ? 'bg-green-600' : undefined}
+                >
+                  {isLicensed && <Check className="h-3 w-3 mr-1" />}
+                  {isLicensed
+                    ? 'Licensed'
+                    : status?.message === 'License inactive'
+                      ? 'Inactive'
+                      : status?.message === 'License has expired'
+                        ? 'Expired'
+                        : 'Verification required'}
                 </Badge>
               </div>
+              {isLicensed && status?.warning && (
+                <p role="alert" className="text-sm text-orange-500">
+                  {status.warning}
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -266,7 +321,22 @@ export function License() {
                 </div>
               </div>
 
-              {typeof status?.projectLimit === 'number' && (
+              {!isLicensed && (
+                <Button
+                  variant="outline"
+                  onClick={() => syncMutation.mutate()}
+                  disabled={syncMutation.isPending || removeMutation.isPending}
+                >
+                  {syncMutation.isPending ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Sync license
+                </Button>
+              )}
+
+              {isLicensed && typeof status?.projectLimit === 'number' && (
                 <div className="space-y-4 border-t pt-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -398,31 +468,6 @@ export function License() {
             </div>
           ) : (
             <form onSubmit={handleActivate} className="space-y-4">
-              {activationSelection && (
-                <div className="space-y-3">
-                  <p className="font-medium">
-                    Choose up to {activationSelection.projectLimit} projects to keep available
-                  </p>
-                  <ProjectSelection
-                    projects={activationSelection.projects}
-                    limit={activationSelection.projectLimit}
-                    selectedIds={selectedIds ?? []}
-                    onChange={setSelectedIds}
-                    disabled={activateMutation.isPending}
-                  />
-                </div>
-              )}
-              {status?.installed && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => syncMutation.mutate()}
-                  disabled={syncMutation.isPending || activateMutation.isPending}
-                >
-                  {syncMutation.isPending && <Spinner size="sm" />}
-                  Sync installed license
-                </Button>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="license-key">License Key</Label>
                 <Textarea
@@ -437,11 +482,11 @@ export function License() {
                     setSelectedIds(null);
                   }}
                   rows={4}
-                  className="font-mono text-sm"
+                  className="field-sizing-content min-h-[100px] resize-none font-mono text-sm"
                 />
               </div>
               <div className="flex items-center gap-4">
-                <Button type="submit" disabled={activateMutation.isPending}>
+                <Button type="submit" disabled={activateMutation.isPending || statusError}>
                   {activateMutation.isPending && <Spinner size="sm" className="mr-2" />}
                   Activate License
                 </Button>
@@ -467,15 +512,57 @@ export function License() {
           if (!open) setAgreementAccepted(false);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Activate Enterprise License</AlertDialogTitle>
-            <AlertDialogDescription>
-              Review the Enterprise License Agreement before activating this license. If you act for
-              another person or an organization, you must be authorized to accept on their behalf.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Review the Enterprise License Agreement before activating this license. If you act
+                  for another person or an organization, you must be authorized to accept on their
+                  behalf.
+                </p>
+                <p>
+                  <strong className="font-medium text-foreground">
+                    Activating binds this license to this installation.
+                  </strong>{' '}
+                  This key cannot be used on another installation. To move your license, you must
+                  replace (rotate) the key first.
+                </p>
+                <p>
+                  Sign in to the{' '}
+                  <a
+                    href="https://bugpin.io/portal/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    customer portal
+                  </a>
+                  , find your license, and choose{' '}
+                  <strong>Replace license for another server</strong>. Type <strong>replace</strong>{' '}
+                  to confirm, then copy or download the new key and activate it on the new
+                  installation. The old key is revoked. Replacement is available once every 24
+                  hours.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="flex items-start gap-3 py-2">
+          {activationSelection && (
+            <div className="space-y-3">
+              <p className="font-medium">
+                Choose up to {activationSelection.projectLimit} projects to keep available
+              </p>
+              <ProjectSelection
+                projects={activationSelection.projects}
+                limit={activationSelection.projectLimit}
+                selectedIds={selectedIds ?? []}
+                onChange={setSelectedIds}
+                disabled={activateMutation.isPending}
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-3 py-2">
             <Checkbox
               id="enterprise-license-agreement"
               checked={agreementAccepted}
